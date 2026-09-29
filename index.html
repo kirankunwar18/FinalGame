@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TikTok Comment Battle</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #111;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+      }
+
+      #game-wrapper {
+        width: min(100vw, 540px);
+        height: 100vh;
+        margin: auto;
+        position: relative;
+        overflow: hidden;
+        background: #111;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #status {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        z-index: 20;
+
+        padding: 8px 12px;
+
+        background: rgba(0, 0, 0, 0.65);
+        color: white;
+
+        border-radius: 8px;
+
+        font-size: 13px;
+        text-align: center;
+      }
+
+      #controls {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+
+        z-index: 20;
+
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: none;
+        border-radius: 8px;
+
+        padding: 8px 12px;
+
+        font-weight: bold;
+        cursor: pointer;
+      }
+
+      #teamAButton {
+        background: #e63946;
+        color: white;
+      }
+
+      #teamBButton {
+        background: #00b4d8;
+        color: white;
+      }
+
+      #giftButton {
+        background: #ffd166;
+        color: black;
+      }
+
+      #resetButton {
+        background: white;
+        color: black;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="game-wrapper">
+      <canvas id="battleCanvas"></canvas>
+
+      <div id="status">Connecting to TikFinity...</div>
+
+      <div id="controls">
+        <button id="teamAButton">Test A</button>
+        <button id="teamBButton">Test B</button>
+        <button id="giftButton">Test Gift</button>
+        <button id="resetButton">Reset</button>
+      </div>
+    </div>
+
+    <script>
+      /* ============================================================
+   GAME CONFIGURATION
+============================================================ */
+
+      const canvas = document.getElementById("battleCanvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = 1080;
+      canvas.height = 1920;
+
+      const GAME_WIDTH = canvas.width;
+      const GAME_HEIGHT = canvas.height;
+
+      /* ============================================================
+   GAME STATE
+============================================================ */
+
+      let players = [];
+      let bullets = [];
+      let effects = [];
+
+      let screenShake = 0;
+
+      let playerCounter = 0;
+
+      /* ============================================================
+   DEFAULT AVATAR
+============================================================ */
+
+      const DEFAULT_AVATAR =
+        "data:image/svg+xml;charset=UTF-8," +
+        encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg"
+             width="300"
+             height="300">
+
+            <rect width="300"
+                  height="300"
+                  fill="#777"/>
+
+            <circle
+                cx="150"
+                cy="110"
+                r="55"
+                fill="#ddd"/>
+
+            <path
+                d="M70 270
+                   C75 195 225 195 230 270"
+                fill="#ddd"/>
+        </svg>
+    `);
+
+      /* ============================================================
+   UTILITY
+============================================================ */
+
+      function random(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function randomId() {
+        playerCounter++;
+
+        return "player_" + playerCounter;
+      }
+
+      /* ============================================================
+   PLAYER CLASS
+============================================================ */
+
+      class Player {
+        constructor(id, username, avatar, team) {
+          this.id = id;
+
+          this.username = username || "viewer";
+
+          this.team = team;
+
+          this.kills = 0;
+
+          this.radius = 52;
+
+          this.hp = 100;
+
+          this.maxHp = 100;
+
+          this.damage = 12;
+
+          this.bulletSize = 9;
+
+          this.speed = random(0.2, 0.6);
+
+          this.lastShot = 0;
+
+          this.shootDelay = random(900, 1700);
+
+          this.angle = random(0, Math.PI * 2);
+
+          /*
+           * TEAM A = left side
+           * TEAM B = right side
+           */
+
+          if (team === "A") {
+            this.x = random(80, 450);
+          } else {
+            this.x = random(630, 1000);
+          }
+
+          this.y = random(300, 1650);
+
+          /*
+           * Load TikTok avatar
+           */
+
+          this.img = new Image();
+
+          this.img.crossOrigin = "anonymous";
+
+          this.img.src = avatar || DEFAULT_AVATAR;
+
+          this.img.onerror = () => {
+            this.img.src = DEFAULT_AVATAR;
+          };
+        }
+
+        /* --------------------------------------------------------
+       PLAYER GETS STRONGER AFTER KILL
+    -------------------------------------------------------- */
+
+        grow() {
+          this.kills++;
+
+          this.radius = Math.min(120, 52 + this.kills * 7);
+
+          this.maxHp = 100 + this.kills * 30;
+
+          this.hp = Math.min(this.maxHp, this.hp + 50);
+
+          this.damage = 12 + this.kills * 3;
+
+          this.bulletSize = Math.min(20, 9 + this.kills);
+        }
+
+        /* --------------------------------------------------------
+       FIND ENEMY
+    -------------------------------------------------------- */
+
+        findEnemy() {
+          const enemies = players.filter(
+            (player) => player.team !== this.team && player.hp > 0,
+          );
+
+          if (enemies.length === 0) {
+            return null;
+          }
+
+          /*
+           * Find closest enemy
+           */
+
+          let closest = enemies[0];
+
+          let closestDistance = distance(this, closest);
+
+          for (let i = 1; i < enemies.length; i++) {
+            const d = distance(this, enemies[i]);
+
+            if (d < closestDistance) {
+              closest = enemies[i];
+
+              closestDistance = d;
+            }
+          }
+
+          return closest;
+        }
+
+        /* --------------------------------------------------------
+       SHOOT
+    -------------------------------------------------------- */
+
+        shoot(now) {
+          if (now - this.lastShot < this.shootDelay) {
+            return;
+          }
+
+          const target = this.findEnemy();
+
+          if (!target) {
+            return;
+          }
+
+          const angle = Math.atan2(target.y - this.y, target.x - this.x);
+
+          bullets.push({
+            x: this.x,
+
+            y: this.y,
+
+            team: this.team,
+
+            ownerId: this.id,
+
+            targetId: target.id,
+
+            angle: angle,
+
+            speed: 9,
+
+            damage: this.damage,
+
+            size: this.bulletSize,
+          });
+
+          this.lastShot = now;
+        }
+
+        /* --------------------------------------------------------
+       SMALL MOVEMENT
+    -------------------------------------------------------- */
+
+        move() {
+          this.angle += random(-0.015, 0.015);
+
+          /*
+           * Very slow movement.
+           * Players stay mostly on their side.
+           */
+
+          this.x += Math.cos(this.angle) * this.speed;
+
+          this.y += Math.sin(this.angle) * this.speed;
+
+          if (this.team === "A") {
+            this.x = Math.max(60, Math.min(500, this.x));
+          } else {
+            this.x = Math.max(580, Math.min(1020, this.x));
+          }
+
+          this.y = Math.max(180, Math.min(1750, this.y));
+        }
+
+        /* --------------------------------------------------------
+       UPDATE
+    -------------------------------------------------------- */
+
+        update(now) {
+          this.move();
+
+          this.shoot(now);
+        }
+
+        /* --------------------------------------------------------
+       DRAW PLAYER
+    -------------------------------------------------------- */
+
+        draw() {
+          ctx.save();
+
+          /*
+           * HP BAR
+           */
+
+          const barWidth = this.radius * 2;
+
+          const barHeight = 10;
+
+          const barX = this.x - this.radius;
+
+          const barY = this.y - this.radius - 25;
+
+          ctx.fillStyle = "#333";
+
+          ctx.fillRect(barX, barY, barWidth, barHeight);
+
+          ctx.fillStyle = this.team === "A" ? "#39ff14" : "#39ff14";
+
+          const hpPercent = Math.max(0, this.hp / this.maxHp);
+
+          ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+
+          /*
+           * USERNAME
+           */
+
+          ctx.textAlign = "center";
+
+          ctx.font =
+            "bold " +
+            Math.max(18, Math.min(30, this.radius * 0.45)) +
+            "px Arial";
+
+          ctx.fillStyle = this.team === "A" ? "#111" : "#fff";
+
+          let displayName = this.username;
+
+          if (displayName.length > 12) {
+            displayName = displayName.substring(0, 12) + "...";
+          }
+
+          ctx.fillText(
+            displayName + "  💀" + this.kills,
+
+            this.x,
+
+            this.y - this.radius - 38,
+          );
+
+          /*
+           * AVATAR CIRCLE
+           */
+
+          ctx.save();
+
+          ctx.beginPath();
+
+          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+
+          ctx.clip();
+
+          if (this.img.complete) {
+            try {
+              ctx.drawImage(
+                this.img,
+
+                this.x - this.radius,
+
+                this.y - this.radius,
+
+                this.radius * 2,
+
+                this.radius * 2,
+              );
+            } catch (e) {
+              drawDefaultAvatar(this.x, this.y, this.radius);
+            }
+          } else {
+            drawDefaultAvatar(this.x, this.y, this.radius);
+          }
+
+          ctx.restore();
+
+          /*
+           * TEAM BORDER
+           */
+
+          ctx.beginPath();
+
+          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+
+          ctx.strokeStyle = this.team === "A" ? "#ff304f" : "#00d9ff";
+
+          ctx.lineWidth = Math.max(5, this.radius * 0.1);
+
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      /* ============================================================
+   DEFAULT AVATAR DRAW
+============================================================ */
+
+      function drawDefaultAvatar(x, y, radius) {
+        ctx.fillStyle = "#777";
+
+        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+
+        ctx.fillStyle = "#ddd";
+
+        ctx.beginPath();
+
+        ctx.arc(x, y - radius * 0.2, radius * 0.35, 0, Math.PI * 2);
+
+        ctx.fill();
+      }
+
+      /* ============================================================
+   ADD PLAYER
+============================================================ */
+
+      function addPlayer(username, avatar, team) {
+        if (!username) {
+          username = "viewer_" + Math.floor(Math.random() * 9999);
+        }
+
+        /*
+         * Prevent same viewer
+         * joining multiple times
+         */
+
+        const existing = players.find((p) => p.id === username);
+
+        if (existing) {
+          /*
+           * If they already exist,
+           * give them some HP.
+           */
+
+          existing.hp = Math.min(existing.maxHp, existing.hp + 20);
+
+          return;
+        }
+
+        const player = new Player(username, username, avatar, team);
+
+        players.push(player);
+
+        createJoinEffect(player);
+
+        updateStatus();
+      }
+
+      /* ============================================================
+   JOIN EFFECT
+============================================================ */
+
+      function createJoinEffect(player) {
+        effects.push({
+          type: "join",
+
+          x: player.x,
+
+          y: player.y,
+
+          team: player.team,
+
+          life: 60,
+
+          maxLife: 60,
+        });
+      }
+
+      /* ============================================================
+   BULLET UPDATE
+============================================================ */
+
+      function updateBullets() {
+        for (let i = bullets.length - 1; i >= 0; i--) {
+          const bullet = bullets[i];
+
+          bullet.x += Math.cos(bullet.angle) * bullet.speed;
+
+          bullet.y += Math.sin(bullet.angle) * bullet.speed;
+
+          /*
+           * Remove bullet
+           * outside screen
+           */
+
+          if (
+            bullet.x < -50 ||
+            bullet.x > GAME_WIDTH + 50 ||
+            bullet.y < -50 ||
+            bullet.y > GAME_HEIGHT + 50
+          ) {
+            bullets.splice(i, 1);
+
+            continue;
+          }
+
+          /*
+           * Draw bullet
+           */
+
+          ctx.beginPath();
+
+          ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+
+          ctx.fillStyle = bullet.team === "A" ? "#ff304f" : "#00d9ff";
+
+          ctx.fill();
+
+          /*
+           * Collision
+           */
+
+          let hit = null;
+
+          for (const player of players) {
+            if (player.team === bullet.team) {
+              continue;
+            }
+
+            if (player.hp <= 0) {
+              continue;
+            }
+
+            const d = Math.hypot(
+              player.x - bullet.x,
+
+              player.y - bullet.y,
+            );
+
+            if (d < player.radius + bullet.size) {
+              hit = player;
+
+              break;
+            }
+          }
+
+          if (hit) {
+            hit.hp -= bullet.damage;
+
+            createHitEffect(hit.x, hit.y, hit.team);
+
+            bullets.splice(i, 1);
+
+            /*
+             * Player killed
+             */
+
+            if (hit.hp <= 0) {
+              const killer = players.find((p) => p.id === bullet.ownerId);
+
+              if (killer) {
+                killer.grow();
+
+                createKillEffect(hit);
+              }
+            }
+          }
+        }
+      }
+
+      /* ============================================================
+   HIT EFFECT
+============================================================ */
+
+      function createHitEffect(x, y, team) {
+        effects.push({
+          type: "hit",
+
+          x: x,
+
+          y: y,
+
+          team: team,
+
+          life: 20,
+
+          maxLife: 20,
+        });
+      }
+
+      /* ============================================================
+   KILL EFFECT
+============================================================ */
+
+      function createKillEffect(player) {
+        effects.push({
+          type: "kill",
+
+          x: player.x,
+
+          y: player.y,
+
+          life: 70,
+
+          maxLife: 70,
+        });
+      }
+
+      /* ============================================================
+   DRAW EFFECTS
+============================================================ */
+
+      function drawEffects() {
+        for (let i = effects.length - 1; i >= 0; i--) {
+          const effect = effects[i];
+
+          effect.life--;
+
+          if (effect.life <= 0) {
+            effects.splice(i, 1);
+
+            continue;
+          }
+
+          const progress = 1 - effect.life / effect.maxLife;
+
+          if (effect.type === "join") {
+            const radius = 30 + progress * 120;
+
+            ctx.beginPath();
+
+            ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+
+            ctx.strokeStyle =
+              effect.team === "A"
+                ? `rgba(255,48,79,${1 - progress})`
+                : `rgba(0,217,255,${1 - progress})`;
+
+            ctx.lineWidth = 10;
+
+            ctx.stroke();
+          }
+
+          if (effect.type === "hit") {
+            const radius = 10 + progress * 30;
+
+            ctx.beginPath();
+
+            ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+
+            ctx.strokeStyle = effect.team === "A" ? "#ff304f" : "#00d9ff";
+
+            ctx.lineWidth = 5;
+
+            ctx.stroke();
+          }
+
+          if (effect.type === "kill") {
+            ctx.textAlign = "center";
+
+            ctx.font = "bold 45px Arial";
+
+            ctx.fillStyle = `rgba(255,255,255,${1 - progress})`;
+
+            ctx.fillText("💀", effect.x, effect.y - progress * 100);
+          }
+        }
+      }
+
+      /* ============================================================
+   GIFT ATTACK
+============================================================ */
+
+      function giftAttack(coins, senderTeam) {
+        const enemyTeam = senderTeam === "A" ? "B" : "A";
+
+        const targets = players.filter((p) => p.team === enemyTeam && p.hp > 0);
+
+        if (targets.length === 0) {
+          return;
+        }
+
+        /*
+         * SMALL GIFT
+         */
+
+        if (coins >= 1 && coins < 10) {
+          const target = targets[Math.floor(Math.random() * targets.length)];
+
+          target.hp -= 25;
+
+          createHitEffect(target.x, target.y, target.team);
+        } else if (coins >= 10 && coins < 100) {
+
+        /*
+         * MEDIUM GIFT
+         */
+          screenShake = 15;
+
+          targets.forEach((target) => {
+            target.hp -= 40;
+
+            createHitEffect(target.x, target.y, target.team);
+          });
+        } else if (coins >= 100 && coins < 500) {
+
+        /*
+         * BIG GIFT
+         */
+          screenShake = 30;
+
+          targets.forEach((target) => {
+            target.hp -= 100;
+
+            createHitEffect(target.x, target.y, target.team);
+          });
+        } else {
+
+        /*
+         * VERY BIG GIFT
+         */
+          screenShake = 60;
+
+          targets.forEach((target) => {
+            target.hp = 0;
+          });
+        }
+      }
+
+      /* ============================================================
+   DRAW BACKGROUND
+============================================================ */
+
+      function drawBackground() {
+        /*
+         * TEAM A
+         */
+
+        ctx.fillStyle = "#f4f4f4";
+
+        ctx.fillRect(0, 0, GAME_WIDTH / 2, GAME_HEIGHT);
+
+        /*
+         * TEAM B
+         */
+
+        ctx.fillStyle = "#0d1b2a";
+
+        ctx.fillRect(GAME_WIDTH / 2, 0, GAME_WIDTH / 2, GAME_HEIGHT);
+
+        /*
+         * CENTER LINE
+         */
+
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+
+        ctx.fillRect(GAME_WIDTH / 2 - 3, 0, 6, GAME_HEIGHT);
+
+        /*
+         * TEAM A LABEL
+         */
+
+        ctx.fillStyle = "#222";
+
+        ctx.font = "bold 130px Arial";
+
+        ctx.textAlign = "center";
+
+        ctx.fillText("A", GAME_WIDTH * 0.25, 150);
+
+        /*
+         * TEAM B LABEL
+         */
+
+        ctx.fillStyle = "#fff";
+
+        ctx.fillText("B", GAME_WIDTH * 0.75, 150);
+
+        /*
+         * SCORE
+         */
+
+        const teamA = players.filter((p) => p.team === "A").length;
+
+        const teamB = players.filter((p) => p.team === "B").length;
+
+        ctx.font = "bold 35px Arial";
+
+        ctx.fillStyle = "#222";
+
+        ctx.fillText(`${teamA} players`, GAME_WIDTH * 0.25, 205);
+
+        ctx.fillStyle = "#fff";
+
+        ctx.fillText(`${teamB} players`, GAME_WIDTH * 0.75, 205);
+      }
+
+      /* ============================================================
+   CLEAN DEAD PLAYERS
+============================================================ */
+
+      function removeDeadPlayers() {
+        for (let i = players.length - 1; i >= 0; i--) {
+          if (players[i].hp <= 0) {
+            players.splice(i, 1);
+          }
+        }
+      }
+
+      /* ============================================================
+   STATUS
+============================================================ */
+
+      function updateStatus() {
+        const a = players.filter((p) => p.team === "A").length;
+
+        const b = players.filter((p) => p.team === "B").length;
+
+        document.getElementById("status").textContent =
+          `TEAM A: ${a}  |  TEAM B: ${b}`;
+      }
+
+      /* ============================================================
+   GAME LOOP
+============================================================ */
+
+      function gameLoop(now) {
+        ctx.save();
+
+        /*
+         * Screen shake
+         */
+
+        if (screenShake > 0) {
+          const dx = random(-screenShake, screenShake);
+
+          const dy = random(-screenShake, screenShake);
+
+          ctx.translate(dx, dy);
+
+          screenShake *= 0.9;
+
+          if (screenShake < 1) {
+            screenShake = 0;
+          }
+        }
+
+        /*
+         * Background
+         */
+
+        drawBackground();
+
+        /*
+         * Update players
+         */
+
+        for (const player of players) {
+          if (player.hp > 0) {
+            player.update(now);
+          }
+        }
+
+        /*
+         * Draw players
+         */
+
+        for (const player of players) {
+          if (player.hp > 0) {
+            player.draw();
+          }
+        }
+
+        /*
+         * Bullets
+         */
+
+        updateBullets();
+
+        /*
+         * Effects
+         */
+
+        drawEffects();
+
+        /*
+         * Remove dead
+         */
+
+        removeDeadPlayers();
+
+        /*
+         * Status
+         */
+
+        updateStatus();
+
+        ctx.restore();
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      /* ============================================================
+   TIKFINITY WEBSOCKET
+============================================================ */
+
+      let socket = null;
+
+      function connectTikFinity() {
+        try {
+          socket = new WebSocket("ws://localhost:21213/");
+
+          socket.onopen = () => {
+            console.log("Connected to TikFinity");
+
+            document.getElementById("status").textContent =
+              "TikFinity connected";
+          };
+
+          socket.onmessage = (event) => {
+            console.log("TikFinity:", event.data);
+
+            let data;
+
+            try {
+              data = JSON.parse(event.data);
+            } catch (error) {
+              console.log("Invalid JSON", event.data);
+
+              return;
+            }
+
+            /*
+             * CHAT
+             */
+
+            if (data.event === "chat") {
+              handleChat(data);
+            }
+
+            /*
+             * GIFT
+             */
+
+            if (data.event === "gift") {
+              handleGift(data);
+            }
+          };
+
+          socket.onerror = (error) => {
+            console.log("TikFinity WebSocket error", error);
+
+            document.getElementById("status").textContent =
+              "TikFinity not connected - test mode";
+          };
+
+          socket.onclose = () => {
+            console.log("TikFinity disconnected");
+
+            document.getElementById("status").textContent =
+              "TikFinity disconnected - test mode";
+          };
+        } catch (error) {
+          console.log("WebSocket unavailable", error);
+        }
+      }
+
+      /* ============================================================
+   CHAT HANDLER
+============================================================ */
+
+      function handleChat(data) {
+        const info = data.data || {};
+
+        const username = info.uniqueId || info.nickname || "viewer";
+
+        const comment = String(info.comment || "")
+          .trim()
+          .toLowerCase();
+
+        const avatar = info.profilePictureUrl || DEFAULT_AVATAR;
+
+        console.log("Comment:", username, comment);
+
+        /*
+         * A COMMENT
+         */
+
+        if (comment === "a") {
+          addPlayer(username, avatar, "A");
+        } else if (comment === "b") {
+
+        /*
+         * B COMMENT
+         */
+          addPlayer(username, avatar, "B");
+        }
+      }
+
+      /* ============================================================
+   GIFT HANDLER
+============================================================ */
+
+      function handleGift(data) {
+        const info = data.data || {};
+
+        const username = info.uniqueId || "viewer";
+
+        const coins = parseInt(info.diamondCount) || 1;
+
+        /*
+         * Find player's team
+         */
+
+        const player = players.find((p) => p.id === username);
+
+        let team;
+
+        if (player) {
+          team = player.team;
+        } else {
+          /*
+           * If sender hasn't joined,
+           * randomly assign team.
+           */
+
+          team = Math.random() > 0.5 ? "A" : "B";
+        }
+
+        console.log("Gift:", username, coins, team);
+
+        giftAttack(coins, team);
+      }
+
+      /* ============================================================
+   TEST BUTTONS
+============================================================ */
+
+      let testNumber = 0;
+
+      document.getElementById("teamAButton").onclick = () => {
+        testNumber++;
+
+        addPlayer("TestA" + testNumber, DEFAULT_AVATAR, "A");
+      };
+
+      document.getElementById("teamBButton").onclick = () => {
+        testNumber++;
+
+        addPlayer("TestB" + testNumber, DEFAULT_AVATAR, "B");
+      };
+
+      document.getElementById("giftButton").onclick = () => {
+        /*
+         * Test 100 coin attack
+         */
+
+        giftAttack(100, "A");
+      };
+
+      document.getElementById("resetButton").onclick = () => {
+        players = [];
+
+        bullets = [];
+
+        effects = [];
+
+        screenShake = 0;
+
+        updateStatus();
+      };
+
+      /* ============================================================
+   START
+============================================================ */
+
+      connectTikFinity();
+
+      requestAnimationFrame(gameLoop);
+    </script>
+  </body>
+</html>
