@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ne">
+<head>
+    <meta charset="UTF-8">
+    <title>TikTok Battle Zone - Continuous Motion Edition</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: #0b0c10;
+            font-family: 'Arial Black', sans-serif;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 📱 मुख्य ब्याटल स्क्रिन - पोर्ट्रेट अनुपात */
+        #mainBattleScreen {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 576px;   
+            max-height: 1024px; 
+            aspect-ratio: 1080 / 1920;
+            display: flex;
+            flex-direction: row;
+            box-sizing: border-box;
+            background-color: #000;
+            box-shadow: 0 0 40px rgba(0, 242, 254, 0.2);
+        }
+
+        #centerDividerLine {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 4px;
+            height: 100%;
+            background: #ffffff;
+            box-shadow: 0 0 10px #ffffff;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        #sectionA {
+            flex: 1;
+            background: url('messi.jpg') top center/cover no-repeat; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 35px;
+            position: relative;
+            height: 100%;
+        }
+
+        #sectionB {
+            flex: 1;
+            background: url('ronaldo.jpg') top center/cover no-repeat; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 30px;
+            position: relative;
+            height: 100%;
+        }
+
+        .giant-title {
+            font-size: 42px;
+            margin: 0;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            letter-spacing: 1px;
+            z-index: 5;
+        }
+        
+        .color-a { color: #ffffff; text-shadow: 0 0 12px #000, 0 0 5px #000; } 
+        .color-b { color: #ffffff; text-shadow: 0 0 12px #000, 0 0 5px #000; } 
+
+        .status-text {
+            font-size: 13px;
+            margin: 5px 0;
+            font-family: sans-serif;
+            font-weight: bold;
+            text-align: center;
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff !important;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+
+        .spawn-zone {
+            width: 95%;
+            height: 82%;
+            margin-top: 10px;
+            position: relative;
+            overflow: hidden;
+            z-index: 5;
+        }
+
+        #debugPanel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 2px solid #555;
+            width: 220px;
+        }
+        .debug-btn {
+            background: #222;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .debug-btn:hover { background: #00ffcc; color: black; }
+
+        /* प्लेयर बबल - मोसन एनिमेसनका लागि जाभास्क्रिप्टद्वारा पोजिसन लगातार अपडेट हुनेछ */
+        .player-node {
+            position: absolute;
+            border-radius: 50%;
+            background-color: #333;
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* साइज परिवर्तन हुँदा मात्र स्मुथ ट्रान्जिसन दिने, एक्स र वाई पोजिसन जाभास्क्रिप्टले तीव्र रूपमा हल्लाउँछ */
+            transition: width 0.2s ease, height 0.2s ease, transform 0.1s ease;
+        }
+        .border-a { border: 2px solid #00ccff; } 
+        .border-b { border: 2px solid #ff3366; } 
+        
+        .player-hp-bar-bg {
+            position: absolute;
+            top: -10px;
+            width: 100%;
+            height: 4px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .player-hp-bar-fill {
+            height: 100%;
+            width: 100%; 
+            background: #2ecc71;
+            transition: width 0.1s ease;
+        }
+
+        .name-tag {
+            position: absolute;
+            bottom: -16px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            font-size: 8px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+            font-family: sans-serif;
+            font-weight: bold;
+        }
+
+        .heal-glow {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px #2ecc71 !important;
+        }
+
+        .game-weapon-effect {
+            position: absolute;
+            border-radius: 50%;
+            z-index: 50;
+            pointer-events: none;
+            transition: left 0.4s linear, top 0.4s linear;
+        }
+
+        #topWSIndicator {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            color: #fff;
+            background: rgba(0,0,0,0.85);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="topWSIndicator">TikFinity Link: <span id="wsState" style="color: orange;">Offline Test Mode 🟡</span></div>
+
+    <!-- 🛠️ टेस्ट बटनहरू -->
+    <div id="debugPanel">
+        <h4 style="margin:0 0 5px 0; text-align:center; color:#00ffcc;">🛠️ CONTINUOUS MOTION</h4>
+        <button class="debug-btn" onclick="addTestPlayer('A')">➕ Add Player A (Floating Motion)</button>
+        <button class="debug-btn" onclick="addTestPlayer('B')">➕ Add Player B (Floating Motion)</button>
+        <button class="debug-btn" onclick="simulateIndividualLike('Player_A')">❤️ Like as Player A (+1 HP)</button>
+        <button class="debug-btn" onclick="simulateGiftAttack(15)">🎁 15 Coins Attack</button>
+    </div>
+
+    <!-- 📱 पोर्ट्रेट ब्याटल विन्डो -->
+    <div id="mainBattleScreen">
+        <div id="centerDividerLine"></div>
+
+        <div id="sectionA">
+            <h1 class="giant-title color-a">A</h1>
+            <div class="status-text" id="statusA">Type 'A' • खिलाड़ी: 0</div>
+            <div class="spawn-zone" id="zoneA"></div>
+        </div>
+
+        <div id="sectionB">
+            <h1 class="giant-title color-b">B</h1>
+            <div class="status-text" id="statusB">Type 'B' • खिलाड़ी: 0</div>
+            <div class="spawn-zone" id="zoneB"></div>
+        </div>
+    </div>
+
+<script>
+    let scoreA = 0; let scoreB = 0; let activePlayers = {}; 
+    const wsUrl = "ws://localhost:21213/"; let socket;
+
+    function startWebSocket() {
+        try {
+            socket = new WebSocket(wsUrl);
+            const stateEl = document.getElementById('wsState');
+            socket.onopen = () => { stateEl.innerText = "Connected 🟢"; stateEl.style.color = "#00ff00"; };
+            socket.onclose = () => { setTimeout(startWebSocket, 5000); };
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.event === "chat") {
+                        let text = data.comment.trim().toUpperCase();
+                        if (text === 'A' || text === 'B') createPlayerDOM(data.uniqueId, data.profilePictureUrl, text);
+                    }
+                    if (data.event === "like") {
+                        let count = data.likeCount || 1;
+                        healIndividualPlayer(data.uniqueId, count);
+                    }
+                    if (data.event === "follow") triggerFollowLaser(data.uniqueId);
+                    if (data.event === "gift") triggerWeaponAttack(data.uniqueId, data.diamondCount);
+                } catch(e){}
+            };
+        } catch(e){}
+    }
+
+    function createPlayerDOM(username, pic, team) {
+        let zone = team === 'A' ? document.getElementById('zoneA') : document.getElementById('zoneB');
+        if (document.getElementById("p-" + username)) return;
+
+        let node = document.createElement('div');
+        node.id = "p-" + username;
+        node.className = team === 'A' ? "player-node border-a" : "player-node border-b";
+        node.style.backgroundImage = pic ? `url('${pic}')` : "url('https://tiktok.com')";
+
+        node.style.width = "30px";
+        node.style.height = "30px";
+        
+        let startX = zone.offsetWidth / 2 - 15;
+        node.style.left = startX + "px";
+        node.style.top = "-50px"; 
+
+        let hpBg = document.createElement('div'); hpBg.className = "player-hp-bar-bg";
+        let hpFill = document.createElement('div'); hpFill.id = "hp-fill-" + username; hpFill.className = "player-hp-bar-fill";
+        hpBg.appendChild(hpFill); node.appendChild(hpBg);
+
+        let name = document.createElement('div'); name.className = "name-tag"; name.id = "name-tag-" + username; name.innerText = username;
+        node.appendChild(name); zone.appendChild(node);
+
+        // 🌟 नयाँ फिजिक्स: प्लेयर भित्र तैरिनका लागि रेन्डम गति (Speed Variables) सेटिङ
+        let currentX = startX;
+        let currentY = Math.random() * (zone.offsetHeight - 50);
+        let speedX = (Math.random() - 0.5) * 1.5; // दायाँ-बायाँ तैरिने स्पिड
