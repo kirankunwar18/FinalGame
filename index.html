@@ -1,288 +1,2759 @@
 <!DOCTYPE html>
 <html lang="ne">
 <head>
-    <meta charset="UTF-8">
-    <title>TikTok Battle Zone - Continuous Motion Edition</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            width: 100%;
-            height: 100%;
-            background-color: #0b0c10;
-            font-family: 'Arial Black', sans-serif;
-            user-select: none;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok Battle Zone</title>
 
-        /* 📱 मुख्य ब्याटल स्क्रिन - पोर्ट्रेट अनुपात */
-        #mainBattleScreen {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            max-width: 576px;   
-            max-height: 1024px; 
-            aspect-ratio: 1080 / 1920;
-            display: flex;
-            flex-direction: row;
-            box-sizing: border-box;
-            background-color: #000;
-            box-shadow: 0 0 40px rgba(0, 242, 254, 0.2);
-        }
+<style>
+* {
+    box-sizing: border-box;
+}
 
-        #centerDividerLine {
-            position: absolute;
-            top: 0;
-            left: 50%;
-            width: 4px;
-            height: 100%;
-            background: #ffffff;
-            box-shadow: 0 0 10px #ffffff;
-            transform: translateX(-50%);
-            z-index: 10;
-        }
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #050609;
+    font-family: Arial, sans-serif;
+    user-select: none;
+}
 
-        #sectionA {
-            flex: 1;
-            background: url('messi.jpg') top center/cover no-repeat; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding-top: 35px;
-            position: relative;
-            height: 100%;
-        }
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
 
-        #sectionB {
-            flex: 1;
-            background: url('ronaldo.jpg') top center/cover no-repeat; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding-top: 30px;
-            position: relative;
-            height: 100%;
-        }
+/* =========================================================
+   MAIN ARENA
+========================================================= */
 
-        .giant-title {
-            font-size: 42px;
-            margin: 0;
-            font-family: 'Impact', 'Arial Black', sans-serif;
-            letter-spacing: 1px;
-            z-index: 5;
-        }
-        
-        .color-a { color: #ffffff; text-shadow: 0 0 12px #000, 0 0 5px #000; } 
-        .color-b { color: #ffffff; text-shadow: 0 0 12px #000, 0 0 5px #000; } 
+#game {
+    position: relative;
 
-        .status-text {
-            font-size: 13px;
-            margin: 5px 0;
-            font-family: sans-serif;
-            font-weight: bold;
-            text-align: center;
-            z-index: 5;
-            background: rgba(0, 0, 0, 0.7);
-            color: #fff !important;
-            padding: 3px 8px;
-            border-radius: 6px;
-        }
+    width: 100vw;
+    height: 100vh;
 
-        .spawn-zone {
-            width: 95%;
-            height: 82%;
-            margin-top: 10px;
-            position: relative;
-            overflow: hidden;
-            z-index: 5;
-        }
+    max-width: 576px;
+    max-height: 1024px;
 
-        #debugPanel {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.95);
-            color: white;
-            padding: 15px;
-            border-radius: 12px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            border: 2px solid #555;
-            width: 220px;
-        }
-        .debug-btn {
-            background: #222;
-            color: white;
-            border: 1px solid #666;
-            padding: 8px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: bold;
-        }
-        .debug-btn:hover { background: #00ffcc; color: black; }
+    aspect-ratio: 9 / 16;
 
-        /* प्लेयर बबल - मोसन एनिमेसनका लागि जाभास्क्रिप्टद्वारा पोजिसन लगातार अपडेट हुनेछ */
-        .player-node {
-            position: absolute;
-            border-radius: 50%;
-            background-color: #333;
-            background-size: cover;
-            background-position: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            /* साइज परिवर्तन हुँदा मात्र स्मुथ ट्रान्जिसन दिने, एक्स र वाई पोजिसन जाभास्क्रिप्टले तीव्र रूपमा हल्लाउँछ */
-            transition: width 0.2s ease, height 0.2s ease, transform 0.1s ease;
-        }
-        .border-a { border: 2px solid #00ccff; } 
-        .border-b { border: 2px solid #ff3366; } 
-        
-        .player-hp-bar-bg {
-            position: absolute;
-            top: -10px;
-            width: 100%;
-            height: 4px;
-            background: rgba(0,0,0,0.6);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-        .player-hp-bar-fill {
-            height: 100%;
-            width: 100%; 
-            background: #2ecc71;
-            transition: width 0.1s ease;
-        }
+    overflow: hidden;
 
-        .name-tag {
-            position: absolute;
-            bottom: -16px;
-            background: rgba(0,0,0,0.85);
-            color: white;
-            font-size: 8px;
-            padding: 1px 4px;
-            border-radius: 3px;
-            white-space: nowrap;
-            font-family: sans-serif;
-            font-weight: bold;
-        }
+    background: #000;
 
-        .heal-glow {
-            transform: scale(1.1);
-            box-shadow: 0 0 15px #2ecc71 !important;
-        }
+    box-shadow:
+        0 0 40px rgba(0,255,255,.15),
+        0 0 80px rgba(255,0,100,.10);
+}
 
-        .game-weapon-effect {
-            position: absolute;
-            border-radius: 50%;
-            z-index: 50;
-            pointer-events: none;
-            transition: left 0.4s linear, top 0.4s linear;
-        }
+/* =========================================================
+   TEAM BACKGROUNDS
+========================================================= */
 
-        #topWSIndicator {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            color: #fff;
-            background: rgba(0,0,0,0.85);
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 13px;
-            z-index: 100;
-        }
-    </style>
-</head>
-<body>
+.team-background {
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 100%;
 
-    <div id="topWSIndicator">TikFinity Link: <span id="wsState" style="color: orange;">Offline Test Mode 🟡</span></div>
+    background-size: cover;
+    background-position: center top;
+}
 
-    <!-- 🛠️ टेस्ट बटनहरू -->
-    <div id="debugPanel">
-        <h4 style="margin:0 0 5px 0; text-align:center; color:#00ffcc;">🛠️ CONTINUOUS MOTION</h4>
-        <button class="debug-btn" onclick="addTestPlayer('A')">➕ Add Player A (Floating Motion)</button>
-        <button class="debug-btn" onclick="addTestPlayer('B')">➕ Add Player B (Floating Motion)</button>
-        <button class="debug-btn" onclick="simulateIndividualLike('Player_A')">❤️ Like as Player A (+1 HP)</button>
-        <button class="debug-btn" onclick="simulateGiftAttack(15)">🎁 15 Coins Attack</button>
-    </div>
+#backgroundA {
+    left: 0;
 
-    <!-- 📱 पोर्ट्रेट ब्याटल विन्डो -->
-    <div id="mainBattleScreen">
-        <div id="centerDividerLine"></div>
+    background-image:
+        linear-gradient(
+            rgba(0,110,180,.15),
+            rgba(0,0,0,.55)
+        ),
+        url("messi.jpg");
+}
 
-        <div id="sectionA">
-            <h1 class="giant-title color-a">A</h1>
-            <div class="status-text" id="statusA">Type 'A' • खिलाड़ी: 0</div>
-            <div class="spawn-zone" id="zoneA"></div>
-        </div>
+#backgroundB {
+    right: 0;
 
-        <div id="sectionB">
-            <h1 class="giant-title color-b">B</h1>
-            <div class="status-text" id="statusB">Type 'B' • खिलाड़ी: 0</div>
-            <div class="spawn-zone" id="zoneB"></div>
-        </div>
-    </div>
+    background-image:
+        linear-gradient(
+            rgba(180,0,60,.15),
+            rgba(0,0,0,.55)
+        ),
+        url("ronaldo.jpg");
+}
 
-<script>
-    let scoreA = 0; let scoreB = 0; let activePlayers = {}; 
-    const wsUrl = "ws://localhost:21213/"; let socket;
+/* =========================================================
+   DARK OVERLAY
+========================================================= */
 
-    function startWebSocket() {
-        try {
-            socket = new WebSocket(wsUrl);
-            const stateEl = document.getElementById('wsState');
-            socket.onopen = () => { stateEl.innerText = "Connected 🟢"; stateEl.style.color = "#00ff00"; };
-            socket.onclose = () => { setTimeout(startWebSocket, 5000); };
-            socket.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.event === "chat") {
-                        let text = data.comment.trim().toUpperCase();
-                        if (text === 'A' || text === 'B') createPlayerDOM(data.uniqueId, data.profilePictureUrl, text);
-                    }
-                    if (data.event === "like") {
-                        let count = data.likeCount || 1;
-                        healIndividualPlayer(data.uniqueId, count);
-                    }
-                    if (data.event === "follow") triggerFollowLaser(data.uniqueId);
-                    if (data.event === "gift") triggerWeaponAttack(data.uniqueId, data.diamondCount);
-                } catch(e){}
-            };
-        } catch(e){}
+#darkOverlay {
+    position: absolute;
+    inset: 0;
+
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(0,0,0,.15),
+            transparent 30%,
+            rgba(0,0,0,.3)
+        );
+
+    pointer-events: none;
+
+    z-index: 2;
+}
+
+/* =========================================================
+   CENTER LINE
+========================================================= */
+
+#centerLine {
+    position: absolute;
+
+    top: 0;
+    left: 50%;
+
+    width: 3px;
+    height: 100%;
+
+    transform: translateX(-50%);
+
+    background: white;
+
+    box-shadow:
+        0 0 8px white,
+        0 0 20px rgba(255,255,255,.8);
+
+    z-index: 100;
+}
+
+/* =========================================================
+   TEAM TITLES
+========================================================= */
+
+.teamTitle {
+    position: absolute;
+
+    top: 12px;
+
+    width: 50%;
+
+    text-align: center;
+
+    font-family:
+        Impact,
+        "Arial Black",
+        sans-serif;
+
+    font-size: 42px;
+
+    line-height: 1;
+
+    z-index: 20;
+
+    text-shadow:
+        0 0 8px #000,
+        0 0 20px #000;
+}
+
+#titleA {
+    left: 0;
+    color: #00d9ff;
+}
+
+#titleB {
+    right: 0;
+    color: #ff3366;
+}
+
+/* =========================================================
+   SCORE
+========================================================= */
+
+#scoreBoard {
+    position: absolute;
+
+    top: 12px;
+    left: 50%;
+
+    transform: translateX(-50%);
+
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    padding: 5px 12px;
+
+    border-radius: 20px;
+
+    background: rgba(0,0,0,.88);
+
+    color: white;
+
+    font-size: 12px;
+    font-weight: bold;
+
+    z-index: 150;
+
+    pointer-events: none;
+}
+
+#scoreA {
+    color: #00d9ff;
+}
+
+#scoreB {
+    color: #ff3366;
+}
+
+/* =========================================================
+   PLAYER AREAS
+========================================================= */
+
+#arena {
+    position: absolute;
+
+    inset: 0;
+
+    z-index: 10;
+}
+
+/* =========================================================
+   PLAYER
+========================================================= */
+
+.player {
+    position: absolute;
+
+    width: 42px;
+    height: 42px;
+
+    border-radius: 50%;
+
+    background:
+        #333 center / cover no-repeat;
+
+    z-index: 30;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    transition:
+        left .45s ease,
+        top .45s ease,
+        transform .12s ease,
+        box-shadow .15s ease;
+
+    will-change:
+        left,
+        top,
+        transform;
+}
+
+.playerA {
+    border: 2px solid #00d9ff;
+
+    box-shadow:
+        0 0 8px #00d9ff,
+        0 0 18px rgba(0,217,255,.6);
+}
+
+.playerB {
+    border: 2px solid #ff3366;
+
+    box-shadow:
+        0 0 8px #ff3366,
+        0 0 18px rgba(255,51,102,.6);
+}
+
+/* =========================================================
+   HP
+========================================================= */
+
+.hpBackground {
+    position: absolute;
+
+    left: 0;
+    top: -9px;
+
+    width: 100%;
+    height: 5px;
+
+    border-radius: 4px;
+
+    overflow: hidden;
+
+    background: rgba(0,0,0,.85);
+}
+
+.hpFill {
+    width: 100%;
+    height: 100%;
+
+    background: #2ecc71;
+
+    transition:
+        width .15s ease,
+        background .15s ease;
+}
+
+/* =========================================================
+   NAME
+========================================================= */
+
+.playerName {
+    position: absolute;
+
+    bottom: -17px;
+
+    max-width: 90px;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+    padding: 2px 4px;
+
+    border-radius: 3px;
+
+    color: white;
+
+    background: rgba(0,0,0,.85);
+
+    font-size: 8px;
+    font-weight: bold;
+}
+
+/* =========================================================
+   MUZZLE FLASH
+========================================================= */
+
+.muzzleFlash {
+    animation: muzzle .16s ease-out;
+}
+
+@keyframes muzzle {
+
+    0% {
+        transform: scale(1);
     }
 
-    function createPlayerDOM(username, pic, team) {
-        let zone = team === 'A' ? document.getElementById('zoneA') : document.getElementById('zoneB');
-        if (document.getElementById("p-" + username)) return;
+    50% {
+        transform: scale(1.35);
 
-        let node = document.createElement('div');
-        node.id = "p-" + username;
-        node.className = team === 'A' ? "player-node border-a" : "player-node border-b";
-        node.style.backgroundImage = pic ? `url('${pic}')` : "url('https://tiktok.com')";
+        filter:
+            brightness(2);
+    }
 
-        node.style.width = "30px";
-        node.style.height = "30px";
-        
-        let startX = zone.offsetWidth / 2 - 15;
-        node.style.left = startX + "px";
-        node.style.top = "-50px"; 
+    100% {
+        transform: scale(1);
+    }
+}
 
-        let hpBg = document.createElement('div'); hpBg.className = "player-hp-bar-bg";
-        let hpFill = document.createElement('div'); hpFill.id = "hp-fill-" + username; hpFill.className = "player-hp-bar-fill";
-        hpBg.appendChild(hpFill); node.appendChild(hpBg);
+/* =========================================================
+   PROJECTILE
+========================================================= */
 
-        let name = document.createElement('div'); name.className = "name-tag"; name.id = "name-tag-" + username; name.innerText = username;
-        node.appendChild(name); zone.appendChild(node);
+.bullet {
+    position: absolute;
 
-        // 🌟 नयाँ फिजिक्स: प्लेयर भित्र तैरिनका लागि रेन्डम गति (Speed Variables) सेटिङ
-        let currentX = startX;
-        let currentY = Math.random() * (zone.offsetHeight - 50);
-        let speedX = (Math.random() - 0.5) * 1.5; // दायाँ-बायाँ तैरिने स्पिड
+    width: 9px;
+    height: 9px;
+
+    border-radius: 50%;
+
+    pointer-events: none;
+
+    z-index: 80;
+
+    transform:
+        translate(-50%, -50%);
+}
+
+.bulletA {
+    background: #00eaff;
+
+    box-shadow:
+        0 0 5px #00eaff,
+        0 0 14px #00ccff,
+        0 0 25px white;
+}
+
+.bulletB {
+    background: #ff3366;
+
+    box-shadow:
+        0 0 5px #ff3366,
+        0 0 14px #ff0033,
+        0 0 25px white;
+}
+
+/* =========================================================
+   HIT
+========================================================= */
+
+.hit {
+    position: absolute;
+
+    width: 32px;
+    height: 32px;
+
+    border-radius: 50%;
+
+    pointer-events: none;
+
+    z-index: 90;
+
+    transform:
+        translate(-50%, -50%);
+
+    background:
+        radial-gradient(
+            circle,
+            white 0%,
+            #ffff00 15%,
+            #ff6500 35%,
+            transparent 70%
+        );
+
+    animation:
+        hitAnimation .35s ease-out forwards;
+}
+
+@keyframes hitAnimation {
+
+    from {
+        opacity: 1;
+
+        transform:
+            translate(-50%, -50%)
+            scale(.3);
+    }
+
+    to {
+        opacity: 0;
+
+        transform:
+            translate(-50%, -50%)
+            scale(2.2);
+    }
+}
+
+/* =========================================================
+   HEAL
+========================================================= */
+
+.heal {
+    animation:
+        healAnimation .4s ease-out;
+}
+
+@keyframes healAnimation {
+
+    50% {
+        transform: scale(1.2);
+
+        box-shadow:
+            0 0 15px #2ecc71,
+            0 0 30px #2ecc71;
+    }
+}
+
+/* =========================================================
+   DAMAGE FLASH
+========================================================= */
+
+.damage {
+    animation:
+        damageAnimation .18s ease-out;
+}
+
+@keyframes damageAnimation {
+
+    50% {
+        transform: scale(.8);
+        filter: brightness(2);
+    }
+}
+
+/* =========================================================
+   DEATH
+========================================================= */
+
+.death {
+    animation:
+        deathAnimation .45s ease-out forwards;
+}
+
+@keyframes deathAnimation {
+
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(2) rotate(180deg);
+    }
+}
+
+/* =========================================================
+   GIFT EFFECTS
+========================================================= */
+
+.weaponEffect {
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    border-radius: 50%;
+
+    transform:
+        translate(-50%, -50%);
+
+    pointer-events: none;
+
+    z-index: 110;
+}
+
+/* Lightning */
+
+.lightning {
+    width: 35px;
+    height: 35px;
+
+    background: #00eaff;
+
+    box-shadow:
+        0 0 10px #00eaff,
+        0 0 30px #00eaff,
+        0 0 60px white;
+
+    animation:
+        lightning .5s ease-out forwards;
+}
+
+@keyframes lightning {
+
+    from {
+        opacity: 1;
+        transform:
+            translate(-50%, -50%)
+            scale(.2);
+    }
+
+    to {
+        opacity: 0;
+        transform:
+            translate(-50%, -50%)
+            scale(3);
+    }
+}
+
+/* Tornado */
+
+.tornado {
+    width: 65px;
+    height: 65px;
+
+    border:
+        6px solid transparent;
+
+    border-top-color: #9b59b6;
+    border-right-color: #00ccff;
+
+    box-shadow:
+        0 0 20px #9b59b6;
+
+    animation:
+        tornado 1s linear forwards;
+}
+
+@keyframes tornado {
+
+    from {
+        opacity: 1;
+
+        transform:
+            translate(-50%, -50%)
+            rotate(0)
+            scale(.2);
+    }
+
+    to {
+        opacity: 0;
+
+        transform:
+            translate(-50%, -50%)
+            rotate(720deg)
+            scale(3);
+    }
+}
+
+/* Fireball */
+
+.fireball {
+    width: 80px;
+    height: 80px;
+
+    background:
+        radial-gradient(
+            circle,
+            white 0%,
+            yellow 15%,
+            orange 35%,
+            red 60%,
+            transparent 72%
+        );
+
+    box-shadow:
+        0 0 20px orange,
+        0 0 50px red;
+
+    animation:
+        fireball .7s ease-out forwards;
+}
+
+@keyframes fireball {
+
+    from {
+        opacity: 1;
+
+        transform:
+            translate(-50%, -50%)
+            scale(.2);
+    }
+
+    to {
+        opacity: 0;
+
+        transform:
+            translate(-50%, -50%)
+            scale(4);
+    }
+}
+
+/* =========================================================
+   GALAXY
+========================================================= */
+
+#galaxy {
+    position: absolute;
+
+    inset: 0;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    background:
+        radial-gradient(
+            circle,
+            rgba(255,255,255,.5),
+            rgba(142,68,173,.85) 25%,
+            rgba(20,10,40,.95) 60%,
+            #000 100%
+        );
+
+    color: white;
+
+    font-size: clamp(20px, 5vw, 34px);
+
+    font-weight: bold;
+
+    text-align: center;
+
+    text-shadow:
+        0 0 10px white,
+        0 0 30px #9b59b6;
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    z-index: 500;
+
+    transition: opacity .25s ease;
+}
+
+#galaxy.active {
+    opacity: 1;
+
+    animation:
+        galaxyPulse 1.5s ease-in-out;
+}
+
+@keyframes galaxyPulse {
+
+    0% {
+        transform: scale(.8);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+.status {
+    position: absolute;
+
+    top: 62px;
+
+    width: 50%;
+
+    text-align: center;
+
+    color: white;
+
+    font-size: 10px;
+    font-weight: bold;
+
+    z-index: 150;
+
+    pointer-events: none;
+}
+
+#statusA {
+    left: 0;
+}
+
+#statusB {
+    right: 0;
+}
+
+/* =========================================================
+   WEBSOCKET
+========================================================= */
+
+#connection {
+    position: fixed;
+
+    top: 8px;
+    left: 8px;
+
+    padding: 6px 10px;
+
+    border-radius: 15px;
+
+    background: rgba(0,0,0,.9);
+
+    color: white;
+
+    font-size: 10px;
+
+    z-index: 2000;
+}
+
+/* =========================================================
+   DEBUG
+========================================================= */
+
+#debug {
+    position: fixed;
+
+    right: 8px;
+    top: 38px;
+
+    width: 190px;
+
+    padding: 10px;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 5px;
+
+    background: rgba(0,0,0,.95);
+
+    border:
+        1px solid #555;
+
+    border-radius: 9px;
+
+    z-index: 2000;
+}
+
+#debug h4 {
+    margin: 0 0 3px;
+
+    text-align: center;
+
+    color: #00ffcc;
+
+    font-size: 11px;
+}
+
+.debugButton {
+    padding: 6px;
+
+    border:
+        1px solid #555;
+
+    border-radius: 5px;
+
+    background: #222;
+
+    color: white;
+
+    cursor: pointer;
+
+    font-size: 9px;
+    font-weight: bold;
+}
+
+.debugButton:hover {
+    background: #00ffcc;
+    color: black;
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media(max-width:600px) {
+
+    #debug {
+        transform: scale(.72);
+        transform-origin: top right;
+    }
+
+    #connection {
+        transform: scale(.8);
+        transform-origin: top left;
+    }
+
+}
+</style>
+</head>
+
+<body>
+
+<!-- =====================================================
+     CONNECTION
+===================================================== -->
+
+<div id="connection">
+    TikFinity:
+    <span id="connectionState" style="color:orange">
+        Connecting 🟡
+    </span>
+</div>
+
+
+<!-- =====================================================
+     DEBUG
+===================================================== -->
+
+<div id="debug">
+
+    <h4>🛠️ TEST CONTROLS</h4>
+
+    <button
+        class="debugButton"
+        onclick="addTestPlayer('A')">
+        ➕ Add A Player
+    </button>
+
+    <button
+        class="debugButton"
+        onclick="addTestPlayer('B')">
+        ➕ Add B Player
+    </button>
+
+    <button
+        class="debugButton"
+        onclick="simulateLike()">
+        ❤️ Like
+    </button>
+
+    <button
+        class="debugButton"
+        onclick="giftAttack(15)">
+        🎁 15 Coins
+    </button>
+
+    <button
+        class="debugButton"
+        onclick="giftAttack(75)">
+        🎁 75 Coins
+    </button>
+
+    <button
+        class="debugButton"
+        onclick="giftAttack(250)">
+        🎁 250 Coins
+    </button>
+
+    <button
+        class="debugButton"
+        onclick="giftAttack(1000)">
+        🌌 1000 Coins
+    </button>
+
+</div>
+
+
+<!-- =====================================================
+     GAME
+===================================================== -->
+
+<div id="game">
+
+    <div
+        id="backgroundA"
+        class="team-background">
+    </div>
+
+    <div
+        id="backgroundB"
+        class="team-background">
+    </div>
+
+    <div id="darkOverlay"></div>
+
+    <div id="arena"></div>
+
+    <div id="centerLine"></div>
+
+    <div
+        id="titleA"
+        class="teamTitle">
+        A
+    </div>
+
+    <div
+        id="titleB"
+        class="teamTitle">
+        B
+    </div>
+
+    <div id="statusA" class="status">
+        Players: 0
+    </div>
+
+    <div id="statusB" class="status">
+        Players: 0
+    </div>
+
+
+    <div id="scoreBoard">
+
+        <span id="scoreA">
+            A: 0
+        </span>
+
+        <span>
+            ⚔️
+        </span>
+
+        <span id="scoreB">
+            B: 0
+        </span>
+
+    </div>
+
+
+    <div id="galaxy">
+        🌌 GALAXY WIPEOUT 🌌
+    </div>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   GAME VARIABLES
+========================================================= */
+
+const players = {};
+
+let testCounter = 0;
+
+let scoreA = 0;
+let scoreB = 0;
+
+let socket = null;
+
+let reconnectTimer = null;
+
+
+/* =========================================================
+   SETTINGS
+========================================================= */
+
+const WS_URL =
+    "ws://localhost:21213/";
+
+const PLAYER_SIZE =
+    42;
+
+const MAX_HP =
+    100;
+
+const BULLET_DAMAGE =
+    8;
+
+const SHOOT_INTERVAL =
+    900;
+
+const BULLET_SPEED =
+    9;
+
+
+/* =========================================================
+   ELEMENTS
+========================================================= */
+
+const game =
+    document.getElementById("game");
+
+const arena =
+    document.getElementById("arena");
+
+
+/* =========================================================
+   RANDOM
+========================================================= */
+
+function random(min, max) {
+
+    return Math.random() *
+        (max - min) +
+        min;
+}
+
+
+/* =========================================================
+   CLAMP
+========================================================= */
+
+function clamp(value, min, max) {
+
+    return Math.max(
+        min,
+        Math.min(max, value)
+    );
+}
+
+
+/* =========================================================
+   CREATE PLAYER
+========================================================= */
+
+function createPlayer(
+    id,
+    team,
+    name = id,
+    image = ""
+) {
+
+    team =
+        team === "B"
+            ? "B"
+            : "A";
+
+
+    /*
+     * Existing player
+     */
+
+    if (players[id]) {
+
+        players[id].hp =
+            clamp(
+                players[id].hp + 5,
+                0,
+                MAX_HP
+            );
+
+        updateHP(players[id]);
+
+        healAnimation(
+            players[id]
+        );
+
+        return players[id];
+    }
+
+
+    /*
+     * Create element
+     */
+
+    const element =
+        document.createElement("div");
+
+
+    element.className =
+        "player " +
+        (
+            team === "A"
+                ? "playerA"
+                : "playerB"
+        );
+
+
+    /*
+     * Image
+     */
+
+    if (image) {
+
+        element.style.backgroundImage =
+            "url('" +
+            image.replace(/'/g, "\\'") +
+            "')";
+    }
+
+
+    /*
+     * Random starting position.
+     *
+     * A players start left.
+     * B players start right.
+     */
+
+    let x;
+
+    if (team === "A") {
+
+        x =
+            random(
+                30,
+                game.clientWidth * .40
+            );
+
+    } else {
+
+        x =
+            random(
+                game.clientWidth * .60,
+                game.clientWidth - 70
+            );
+    }
+
+
+    let y =
+        random(
+            120,
+            game.clientHeight - 100
+        );
+
+
+    element.style.left =
+        x + "px";
+
+    element.style.top =
+        y + "px";
+
+
+    /*
+     * HP bar
+     */
+
+    const hpBackground =
+        document.createElement("div");
+
+    hpBackground.className =
+        "hpBackground";
+
+
+    const hpFill =
+        document.createElement("div");
+
+    hpFill.className =
+        "hpFill";
+
+
+    hpBackground.appendChild(
+        hpFill
+    );
+
+
+    element.appendChild(
+        hpBackground
+    );
+
+
+    /*
+     * Name
+     */
+
+    const nameElement =
+        document.createElement("div");
+
+    nameElement.className =
+        "playerName";
+
+    nameElement.innerText =
+        String(name).substring(
+            0,
+            16
+        );
+
+
+    element.appendChild(
+        nameElement
+    );
+
+
+    /*
+     * Add to arena
+     */
+
+    arena.appendChild(
+        element
+    );
+
+
+    /*
+     * Store data
+     */
+
+    const player = {
+
+        id: id,
+
+        team: team,
+
+        name: name,
+
+        element: element,
+
+        hpFill: hpFill,
+
+        hp: MAX_HP,
+
+        maxHp: MAX_HP,
+
+        x: x,
+
+        y: y,
+
+        alive: true,
+
+        lastShot: 0
+    };
+
+
+    players[id] =
+        player;
+
+
+    updateHP(player);
+
+    updateCounters();
+
+
+    /*
+     * Start movement
+     */
+
+    movePlayer(player);
+
+
+    return player;
+}
+
+
+/* =========================================================
+   UPDATE HP
+========================================================= */
+
+function updateHP(player) {
+
+    if (!player) {
+        return;
+    }
+
+
+    const percentage =
+        clamp(
+            player.hp /
+            player.maxHp *
+            100,
+            0,
+            100
+        );
+
+
+    player.hpFill.style.width =
+        percentage + "%";
+
+
+    if (percentage > 60) {
+
+        player.hpFill.style.background =
+            "#2ecc71";
+
+    } else if (percentage > 30) {
+
+        player.hpFill.style.background =
+            "#f1c40f";
+
+    } else {
+
+        player.hpFill.style.background =
+            "#e74c3c";
+    }
+}
+
+
+/* =========================================================
+   PLAYER MOVEMENT
+========================================================= */
+
+function movePlayer(player) {
+
+    if (!player.alive) {
+        return;
+    }
+
+
+    /*
+     * Keep each player mostly on their side.
+     */
+
+    let minX;
+    let maxX;
+
+
+    if (player.team === "A") {
+
+        minX = 25;
+
+        maxX =
+            game.clientWidth *
+            .45;
+
+    } else {
+
+        minX =
+            game.clientWidth *
+            .55;
+
+        maxX =
+            game.clientWidth -
+            PLAYER_SIZE -
+            25;
+    }
+
+
+    const minY =
+        110;
+
+    const maxY =
+        game.clientHeight -
+        100;
+
+
+    player.x =
+        random(
+            minX,
+            Math.max(
+                minX + 1,
+                maxX
+            )
+        );
+
+
+    player.y =
+        random(
+            minY,
+            Math.max(
+                minY + 1,
+                maxY
+            )
+        );
+
+
+    player.element.style.left =
+        player.x + "px";
+
+    player.element.style.top =
+        player.y + "px";
+
+
+    setTimeout(
+        () => movePlayer(player),
+        random(1800, 3500)
+    );
+}
+
+
+/* =========================================================
+   FIND ENEMY
+========================================================= */
+
+function findEnemy(player) {
+
+    const enemies =
+        Object.values(players)
+            .filter(enemy =>
+                enemy.alive &&
+                enemy.hp > 0 &&
+                enemy.team !== player.team
+            );
+
+
+    if (!enemies.length) {
+        return null;
+    }
+
+
+    /*
+     * Nearest enemy
+     */
+
+    let closest = null;
+
+    let closestDistance =
+        Infinity;
+
+
+    enemies.forEach(enemy => {
+
+        const dx =
+            enemy.x -
+            player.x;
+
+        const dy =
+            enemy.y -
+            player.y;
+
+
+        const distance =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+
+        if (
+            distance <
+            closestDistance
+        ) {
+
+            closestDistance =
+                distance;
+
+            closest =
+                enemy;
+        }
+    });
+
+
+    return closest;
+}
+
+
+/* =========================================================
+   SHOOTING LOOP
+========================================================= */
+
+setInterval(
+    function() {
+
+        const now =
+            Date.now();
+
+
+        Object.values(players)
+            .forEach(player => {
+
+                if (
+                    !player.alive ||
+                    player.hp <= 0
+                ) {
+                    return;
+                }
+
+
+                /*
+                 * Fire rate
+                 */
+
+                if (
+                    now -
+                    player.lastShot <
+                    SHOOT_INTERVAL
+                ) {
+                    return;
+                }
+
+
+                const enemy =
+                    findEnemy(player);
+
+
+                if (!enemy) {
+                    return;
+                }
+
+
+                player.lastShot =
+                    now;
+
+
+                shoot(
+                    player,
+                    enemy
+                );
+
+            });
+
+    },
+    100
+);
+
+
+/* =========================================================
+   SHOOT
+========================================================= */
+
+function shoot(
+    shooter,
+    target
+) {
+
+    if (
+        !shooter.alive ||
+        !target.alive
+    ) {
+        return;
+    }
+
+
+    /*
+     * Shooter center
+     */
+
+    const startX =
+        shooter.x +
+        PLAYER_SIZE / 2;
+
+    const startY =
+        shooter.y +
+        PLAYER_SIZE / 2;
+
+
+    /*
+     * Target center
+     */
+
+    const targetX =
+        target.x +
+        PLAYER_SIZE / 2;
+
+    const targetY =
+        target.y +
+        PLAYER_SIZE / 2;
+
+
+    /*
+     * Muzzle animation
+     */
+
+    shooter.element.classList.add(
+        "muzzleFlash"
+    );
+
+
+    setTimeout(() => {
+
+        if (shooter.element) {
+
+            shooter.element.classList.remove(
+                "muzzleFlash"
+            );
+        }
+
+    }, 180);
+
+
+    /*
+     * Create bullet
+     */
+
+    const bullet =
+        document.createElement("div");
+
+
+    bullet.className =
+        "bullet " +
+        (
+            shooter.team === "A"
+                ? "bulletA"
+                : "bulletB"
+        );
+
+
+    bullet.style.left =
+        startX + "px";
+
+    bullet.style.top =
+        startY + "px";
+
+
+    arena.appendChild(
+        bullet
+    );
+
+
+    /*
+     * Direction
+     */
+
+    const dx =
+        targetX -
+        startX;
+
+    const dy =
+        targetY -
+        startY;
+
+
+    const distance =
+        Math.sqrt(
+            dx * dx +
+            dy * dy
+        );
+
+
+    if (distance === 0) {
+
+        bullet.remove();
+
+        return;
+    }
+
+
+    const vx =
+        dx /
+        distance *
+        BULLET_SPEED;
+
+
+    const vy =
+        dy /
+        distance *
+        BULLET_SPEED;
+
+
+    let x =
+        startX;
+
+    let y =
+        startY;
+
+
+    /*
+     * Bullet animation
+     */
+
+    const interval =
+        setInterval(
+            function() {
+
+                x += vx;
+                y += vy;
+
+
+                bullet.style.left =
+                    x + "px";
+
+                bullet.style.top =
+                    y + "px";
+
+
+                /*
+                 * Target may have died.
+                 */
+
+                if (
+                    !target.alive ||
+                    !players[target.id]
+                ) {
+
+                    clearInterval(
+                        interval
+                    );
+
+                    bullet.remove();
+
+                    return;
+                }
+
+
+                /*
+                 * Current target center
+                 */
+
+                const currentX =
+                    target.x +
+                    PLAYER_SIZE / 2;
+
+                const currentY =
+                    target.y +
+                    PLAYER_SIZE / 2;
+
+
+                const hitDistance =
+                    Math.sqrt(
+                        Math.pow(
+                            x - currentX,
+                            2
+                        ) +
+                        Math.pow(
+                            y - currentY,
+                            2
+                        )
+                    );
+
+
+                /*
+                 * COLLISION
+                 */
+
+                if (
+                    hitDistance <
+                    PLAYER_SIZE / 2 + 5
+                ) {
+
+                    clearInterval(
+                        interval
+                    );
+
+
+                    bullet.remove();
+
+
+                    createHit(
+                        x,
+                        y
+                    );
+
+
+                    damagePlayer(
+                        target,
+                        BULLET_DAMAGE
+                    );
+
+
+                    return;
+                }
+
+
+                /*
+                 * Outside screen
+                 */
+
+                if (
+                    x < -50 ||
+                    x >
+                        game.clientWidth +
+                        50 ||
+                    y < -50 ||
+                    y >
+                        game.clientHeight +
+                        50
+                ) {
+
+                    clearInterval(
+                        interval
+                    );
+
+                    bullet.remove();
+                }
+
+            },
+            16
+        );
+}
+
+
+/* =========================================================
+   DAMAGE PLAYER
+========================================================= */
+
+function damagePlayer(
+    player,
+    damage
+) {
+
+    if (
+        !player ||
+        !player.alive
+    ) {
+        return;
+    }
+
+
+    player.hp -=
+        damage;
+
+
+    player.hp =
+        clamp(
+            player.hp,
+            0,
+            player.maxHp
+        );
+
+
+    updateHP(player);
+
+
+    /*
+     * Damage animation
+     */
+
+    player.element.classList.add(
+        "damage"
+    );
+
+
+    setTimeout(() => {
+
+        if (player.element) {
+
+            player.element.classList.remove(
+                "damage"
+            );
+        }
+
+    }, 200);
+
+
+    /*
+     * Death
+     */
+
+    if (
+        player.hp <= 0
+    ) {
+
+        killPlayer(player);
+    }
+}
+
+
+/* =========================================================
+   KILL PLAYER
+========================================================= */
+
+function killPlayer(player) {
+
+    if (!player.alive) {
+        return;
+    }
+
+
+    player.alive =
+        false;
+
+
+    player.element.classList.add(
+        "death"
+    );
+
+
+    /*
+     * Give opposing team score
+     */
+
+    if (player.team === "A") {
+
+        scoreB++;
+
+    } else {
+
+        scoreA++;
+    }
+
+
+    updateScore();
+
+
+    /*
+     * Remove after animation
+     */
+
+    setTimeout(() => {
+
+        if (
+            player.element &&
+            player.element.parentNode
+        ) {
+
+            player.element.remove();
+        }
+
+
+        delete players[player.id];
+
+        updateCounters();
+
+    }, 450);
+}
+
+
+/* =========================================================
+   HIT EFFECT
+========================================================= */
+
+function createHit(
+    x,
+    y
+) {
+
+    const hit =
+        document.createElement("div");
+
+
+    hit.className =
+        "hit";
+
+
+    hit.style.left =
+        x + "px";
+
+    hit.style.top =
+        y + "px";
+
+
+    arena.appendChild(
+        hit
+    );
+
+
+    setTimeout(() => {
+
+        if (hit.parentNode) {
+            hit.remove();
+        }
+
+    }, 400);
+}
+
+
+/* =========================================================
+   HEAL
+========================================================= */
+
+function healPlayer(player) {
+
+    if (
+        !player ||
+        !player.alive
+    ) {
+        return;
+    }
+
+
+    player.hp =
+        clamp(
+            player.hp + 5,
+            0,
+            player.maxHp
+        );
+
+
+    updateHP(player);
+
+
+    healAnimation(player);
+}
+
+
+function healAnimation(player) {
+
+    player.element.classList.add(
+        "heal"
+    );
+
+
+    setTimeout(() => {
+
+        if (player.element) {
+
+            player.element.classList.remove(
+                "heal"
+            );
+        }
+
+    }, 450);
+}
+
+
+/* =========================================================
+   COUNTERS
+========================================================= */
+
+function updateCounters() {
+
+    let a = 0;
+    let b = 0;
+
+
+    Object.values(players)
+        .forEach(player => {
+
+            if (player.team === "A") {
+                a++;
+            }
+
+            if (player.team === "B") {
+                b++;
+            }
+        });
+
+
+    document.getElementById(
+        "statusA"
+    ).innerText =
+        "Players: " + a;
+
+
+    document.getElementById(
+        "statusB"
+    ).innerText =
+        "Players: " + b;
+}
+
+
+/* =========================================================
+   SCORE
+========================================================= */
+
+function updateScore() {
+
+    document.getElementById(
+        "scoreA"
+    ).innerText =
+        "A: " + scoreA;
+
+
+    document.getElementById(
+        "scoreB"
+    ).innerText =
+        "B: " + scoreB;
+}
+
+
+/* =========================================================
+   TEST PLAYER
+========================================================= */
+
+function addTestPlayer(team) {
+
+    testCounter++;
+
+
+    const id =
+        "TestPlayer_" +
+        testCounter;
+
+
+    createPlayer(
+        id,
+        team,
+        id
+    );
+}
+
+
+/* =========================================================
+   TEST LIKE
+========================================================= */
+
+function simulateLike() {
+
+    const list =
+        Object.values(players);
+
+
+    if (!list.length) {
+        return;
+    }
+
+
+    const player =
+        list[
+            Math.floor(
+                Math.random() *
+                list.length
+            )
+        ];
+
+
+    healPlayer(player);
+}
+
+
+/* =========================================================
+   GIFT ATTACK
+========================================================= */
+
+function giftAttack(
+    coins,
+    attackingTeam = null
+) {
+
+    coins =
+        Number(coins) ||
+        0;
+
+
+    /*
+     * Pick attacking team
+     */
+
+    if (!attackingTeam) {
+
+        attackingTeam =
+            Math.random() < .5
+                ? "A"
+                : "B";
+    }
+
+
+    const targetTeam =
+        attackingTeam === "A"
+            ? "B"
+            : "A";
+
+
+    const targets =
+        Object.values(players)
+            .filter(
+                player =>
+                    player.team ===
+                    targetTeam &&
+                    player.alive
+            );
+
+
+    if (!targets.length) {
+        return;
+    }
+
+
+    /*
+     * Target area
+     */
+
+    let effectClass =
+        "lightning";
+
+
+    let damage =
+        10;
+
+
+    if (
+        coins >= 75 &&
+        coins < 250
+    ) {
+
+        effectClass =
+            "tornado";
+
+        damage =
+            25;
+    }
+
+
+    if (
+        coins >= 250 &&
+        coins < 1000
+    ) {
+
+        effectClass =
+            "fireball";
+
+        damage =
+            50;
+    }
+
+
+    /*
+     * Galaxy
+     */
+
+    if (coins >= 1000) {
+
+        galaxyAttack(
+            targetTeam
+        );
+
+        return;
+    }
+
+
+    /*
+     * Weapon effect
+     */
+
+    createWeaponEffect(
+        targetTeam,
+        effectClass
+    );
+
+
+    /*
+     * Damage every target
+     */
+
+    targets.forEach(
+        target => {
+
+            damagePlayer(
+                target,
+                damage
+            );
+        }
+    );
+}
+
+
+/* =========================================================
+   WEAPON EFFECT
+========================================================= */
+
+function createWeaponEffect(
+    team,
+    effectClass
+) {
+
+    const effect =
+        document.createElement("div");
+
+
+    effect.className =
+        "weaponEffect " +
+        effectClass;
+
+
+    /*
+     * Put effect on target side
+     */
+
+    if (team === "A") {
+
+        effect.style.left =
+            "25%";
+
+    } else {
+
+        effect.style.left =
+            "75%";
+    }
+
+
+    effect.style.top =
+        "50%";
+
+
+    arena.appendChild(
+        effect
+    );
+
+
+    setTimeout(() => {
+
+        if (effect.parentNode) {
+            effect.remove();
+        }
+
+    }, 1200);
+}
+
+
+/* =========================================================
+   GALAXY WIPEOUT
+========================================================= */
+
+function galaxyAttack(
+    targetTeam
+) {
+
+    const galaxy =
+        document.getElementById(
+            "galaxy"
+        );
+
+
+    galaxy.classList.add(
+        "active"
+    );
+
+
+    const targets =
+        Object.values(players)
+            .filter(
+                player =>
+                    player.team ===
+                    targetTeam &&
+                    player.alive
+            );
+
+
+    targets.forEach(
+        target => {
+
+            damagePlayer(
+                target,
+                9999
+            );
+        }
+    );
+
+
+    setTimeout(() => {
+
+        galaxy.classList.remove(
+            "active"
+        );
+
+    }, 1500);
+}
+
+
+/* =========================================================
+   TIKFINITY WEBSOCKET
+========================================================= */
+
+function connectTikFinity() {
+
+    const state =
+        document.getElementById(
+            "connectionState"
+        );
+
+
+    state.innerText =
+        "Connecting 🟡";
+
+    state.style.color =
+        "orange";
+
+
+    try {
+
+        socket =
+            new WebSocket(
+                "ws://localhost:21213/"
+            );
+
+
+        socket.onopen =
+            function() {
+
+                console.log(
+                    "TikFinity connected"
+                );
+
+
+                state.innerText =
+                    "Connected 🟢";
+
+                state.style.color =
+                    "#00ff00";
+            };
+
+
+        socket.onmessage =
+            function(event) {
+
+                console.log(
+                    "TikFinity:",
+                    event.data
+                );
+
+
+                handleTikFinity(
+                    event.data
+                );
+            };
+
+
+        socket.onerror =
+            function(error) {
+
+                console.log(
+                    "WebSocket error:",
+                    error
+                );
+
+
+                state.innerText =
+                    "Error 🔴";
+
+                state.style.color =
+                    "red";
+            };
+
+
+        socket.onclose =
+            function() {
+
+                state.innerText =
+                    "Offline ❌";
+
+                state.style.color =
+                    "red";
+
+
+                if (!reconnectTimer) {
+
+                    reconnectTimer =
+                        setTimeout(
+                            function() {
+
+                                reconnectTimer =
+                                    null;
+
+                                connectTikFinity();
+
+                            },
+                            4000
+                        );
+                }
+            };
+
+    } catch(error) {
+
+        console.error(
+            error
+        );
+    }
+}
+
+
+/* =========================================================
+   HANDLE TIKFINITY
+========================================================= */
+
+function handleTikFinity(
+    raw
+) {
+
+    let data;
+
+
+    try {
+
+        data =
+            typeof raw === "string"
+                ? JSON.parse(raw)
+                : raw;
+
+    } catch(error) {
+
+        console.log(
+            "Not JSON:",
+            raw
+        );
+
+        return;
+    }
+
+
+    if (!data) {
+        return;
+    }
+
+
+    const event =
+        String(
+            data.event ||
+            data.type ||
+            data.action ||
+            ""
+        ).toLowerCase();
+
+
+    /* =====================================================
+       COMMENT
+    ===================================================== */
+
+    if (
+        event === "comment" ||
+        event === "chat" ||
+        event === "message"
+    ) {
+
+        const text =
+            String(
+                data.comment ||
+                data.message ||
+                data.text ||
+                ""
+            )
+            .trim()
+            .toUpperCase();
+
+
+        const id =
+            data.uniqueId ||
+            data.unique_id ||
+            data.username ||
+            data.userId ||
+            (
+                "user_" +
+                Date.now()
+            );
+
+
+        const name =
+            data.nickname ||
+            data.uniqueId ||
+            data.username ||
+            id;
+
+
+        const image =
+            data.profilePictureUrl ||
+            data.profile_picture_url ||
+            data.avatar ||
+            "";
+
+
+        if (
+            text === "A" ||
+            text === "B"
+        ) {
+
+            createPlayer(
+                id,
+                text,
+                name,
+                image
+            );
+        }
+
+
+        return;
+    }
+
+
+    /* =====================================================
+       LIKE
+    ===================================================== */
+
+    if (
+        event === "like" ||
+        event === "likes"
+    ) {
+
+        const id =
+            data.uniqueId ||
+            data.unique_id ||
+            data.username ||
+            data.userId;
+
+
+        const player =
+            players[id];
+
+
+        if (player) {
+
+            const count =
+                Number(
+                    data.likeCount ||
+                    data.like_count ||
+                    data.count ||
+                    1
+                );
+
+
+            player.hp =
+                clamp(
+                    player.hp +
+                    count,
+                    0,
+                    player.maxHp
+                );
+
+
+            updateHP(player);
+
+            healAnimation(player);
+        }
+
+
+        return;
+    }
+
+
+    /* =====================================================
+       GIFT
+    ===================================================== */
+
+    if (
+        event === "gift" ||
+        event === "gifted"
+    ) {
+
+        const coins =
+            Number(
+                data.coins ||
+                data.coinCount ||
+                data.coin_count ||
+                data.diamondCount ||
+                data.diamond_count ||
+                data.diamonds ||
+                0
+            );
+
+
+        const sender =
+            data.uniqueId ||
+            data.unique_id ||
+            data.username ||
+            data.userId;
+
+
+        let team =
+            null;
+
+
+        if (
+            sender &&
+            players[sender]
+        ) {
+
+            team =
+                players[sender].team;
+        }
+
+
+        giftAttack(
+            coins,
+            team
+        );
+
+
+        return;
+    }
+
+
+    console.log(
+        "Unknown event:",
+        data
+    );
+}
+
+
+/* =========================================================
+   KEYBOARD TESTING
+========================================================= */
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+        const key =
+            event.key.toLowerCase();
+
+
+        if (key === "a") {
+
+            addTestPlayer("A");
+        }
+
+
+        if (key === "b") {
+
+            addTestPlayer("B");
+        }
+
+
+        if (key === "1") {
+
+            giftAttack(15);
+        }
+
+
+        if (key === "2") {
+
+            giftAttack(75);
+        }
+
+
+        if (key === "3") {
+
+            giftAttack(250);
+        }
+
+
+        if (key === "4") {
+
+            giftAttack(1000);
+        }
+    }
+);
+
+
+/* =========================================================
+   START
+========================================================= */
+
+window.addEventListener(
+    "load",
+    function() {
+
+        updateScore();
+
+        updateCounters();
+
+        connectTikFinity();
+
+
+        /*
+         * Test players.
+         *
+         * Remove these if you don't want
+         * automatic players when starting.
+         */
+
+        setTimeout(
+            function() {
+
+                addTestPlayer("A");
+                addTestPlayer("A");
+
+                addTestPlayer("B");
+                addTestPlayer("B");
+
+            },
+            1000
+        );
+    }
+);
+
+</script>
+
+</body>
+</html>
