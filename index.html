@@ -76,18 +76,16 @@
       const canvas = document.getElementById("battleCanvas");
       const ctx = canvas.getContext("2d");
 
-      // Fixed internal resolution (game logic stays 1080x1920)
       const GAME_WIDTH = 1080;
       const GAME_HEIGHT = 1920;
       canvas.width = GAME_WIDTH;
       canvas.height = GAME_HEIGHT;
 
-      // Fit the canvas to the screen while keeping 9:16
       function fitCanvas() {
         const wrapper = document.getElementById("game-wrapper");
         const wW = wrapper.clientWidth;
         const wH = wrapper.clientHeight;
-        const gameRatio = GAME_WIDTH / GAME_HEIGHT; // 0.5625
+        const gameRatio = GAME_WIDTH / GAME_HEIGHT;
         const screenRatio = wW / wH;
 
         let cssW, cssH;
@@ -190,7 +188,6 @@
         src.start(now); src.stop(now + duration);
       }
 
-      /* ---- Gift sounds ---- */
       function playRoseSound(team="A") {
         const pan = panForTeamRandom(team);
         for (let i = 0; i < 5; i++) {
@@ -382,7 +379,6 @@
         }
       }
 
-      /* ---- Total Wipe sounds ---- */
       function playTornadoSound(team="A", volume=0.4, duration=3.0) {
         if (!soundEnabled || !audioCtx) return;
         const pan = panForTeam(team);
@@ -640,7 +636,7 @@
       function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
       /* ============================================================
-         PLAYER
+         PLAYER  (BIGGER SIZE)
       ============================================================ */
       class Player {
         constructor(id, username, avatar, team) {
@@ -648,7 +644,7 @@
           this.username = username || "viewer";
           this.team = team;
           this.kills = 0;
-          this.radius = 20;
+          this.radius = 45;               // ← CHANGED: was 20 (much bigger base size)
           this.hp = 250;
           this.maxHp = 250;
           this.damage = 5;
@@ -668,7 +664,7 @@
 
         grow() {
           this.kills++;
-          this.radius = Math.min(25, 22 + this.kills * 1.5);
+          this.radius = Math.min(70, 55 + this.kills * 2);   // ← CHANGED: bigger cap & growth
           this.maxHp = Math.max(this.maxHp, 250 + this.kills * 15);
           this.hp = Math.min(this.maxHp, this.hp + 30);
           this.damage = 5 + this.kills * 1.2;
@@ -717,9 +713,9 @@
         draw() {
           ctx.save();
           const barWidth = this.radius * 2;
-          const barHeight = 10;
+          const barHeight = 18;                                  // ← CHANGED: was 10
           const barX = this.x - this.radius;
-          const barY = this.y - this.radius - 25;
+          const barY = this.y - this.radius - 35;                // ← CHANGED: was -25
           ctx.fillStyle = "#333";
           ctx.fillRect(barX, barY, barWidth, barHeight);
           ctx.fillStyle = "#39ff14";
@@ -727,12 +723,12 @@
           ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
 
           ctx.textAlign = "center";
-          ctx.font = "bold " + Math.max(18, Math.min(30, this.radius * 0.45)) + "px Arial";
+          ctx.font = "bold " + Math.max(22, Math.min(40, this.radius * 0.6)) + "px Arial"; // ← CHANGED
           ctx.fillStyle = this.team === "A" ? "#111" : "#fff";
           let displayName = this.username;
           if (displayName.length > 12) displayName = displayName.substring(0, 12) + "...";
           ctx.fillText(displayName + "  💀" + this.kills,
-                       this.x, this.y - this.radius - 38);
+                       this.x, this.y - this.radius - 52);       // ← CHANGED: was -38
 
           ctx.save();
           ctx.beginPath();
@@ -1284,9 +1280,8 @@
             const spinSpeed = 0.4;
             effect.bladeAngle = (effect.bladeAngle || 0) + spinSpeed;
 
-            // NERFED: Smaller blade and fewer teeth
-            const sawSize    = 85; // CHANGED: was 120 (makes the blade smaller)
-            const teethCount = 10; // CHANGED: was 12 (fewer teeth)
+            const sawSize    = 85;
+            const teethCount = 10;
             const zoneR      = effect.zoneRadius || 220;
             const tickEvery  = effect.tickEvery || 10;
             const dmgPerTick = effect.damagePerTick || 45;
@@ -2059,7 +2054,7 @@
 
           const ZONE_CENTER_X = (enemyLeft + enemyRight) / 2;
           const ZONE_CENTER_Y = GAME_HEIGHT / 2;
-          const ZONE_RADIUS   = 220; // CHANGED: was 300 (smaller attack area)
+          const ZONE_RADIUS   = 220;
 
           effects.push({
             type: "deathSaw",
@@ -2072,9 +2067,9 @@
             sourceTeam: senderTeam,
             bladeAngle: 0,
             stageTimer: 0,
-            life: 180, maxLife: 180, // CHANGED: was 240 (lasts 3 seconds instead of 4)
-            damagePerTick: 45, // CHANGED: was 60 (less damage)
-            tickEvery: 10, // CHANGED: was 8 (deals damage slightly slower)
+            life: 180, maxLife: 180,
+            damagePerTick: 45,
+            tickEvery: 10,
             finished: false,
           });
 
