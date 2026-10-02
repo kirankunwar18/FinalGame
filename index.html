@@ -37,6 +37,16 @@
         background: rgba(0,0,0,0.65); color: white;
         border-radius: 8px; font-size: 13px; text-align: center;
       }
+      #debug {
+        position: absolute; top: 50px; left: 10px; right: 10px;
+        z-index: 25; padding: 8px 12px;
+        background: rgba(0,0,0,0.75); color: #9f9;
+        border-radius: 8px; font-size: 11px;
+        font-family: monospace; text-align: left;
+        max-height: 180px; overflow-y: auto;
+        display: none; white-space: pre-wrap; word-break: break-all;
+      }
+      #debug.visible { display: block; }
       #controls {
         position: absolute; bottom: 10px; left: 50%;
         transform: translateX(-50%);
@@ -53,6 +63,7 @@
       #giftButton  { background: #ffd166; color: black; }
       #resetButton { background: white; color: black; }
       #muteButton  { background: #333; color: white; }
+      #debugButton { background: #444; color: white; }
     </style>
   </head>
 
@@ -60,11 +71,13 @@
     <div id="game-wrapper">
       <canvas id="battleCanvas"></canvas>
       <div id="status">Connecting to TikFinity...</div>
+      <div id="debug"></div>
       <div id="controls">
         <button id="teamAButton">Test A</button>
         <button id="teamBButton">Test B</button>
         <button id="giftButton">Test Gift</button>
         <button id="muteButton">🔊</button>
+        <button id="debugButton">🐞</button>
         <button id="resetButton">Reset</button>
       </div>
     </div>
@@ -102,6 +115,22 @@
       window.addEventListener("resize", fitCanvas);
       window.addEventListener("orientationchange", fitCanvas);
       fitCanvas();
+
+      /* ============================================================
+         DEBUG PANEL
+      ============================================================ */
+      const debugEl = document.getElementById("debug");
+      const debugLines = [];
+      function logDebug(msg) {
+        const time = new Date().toLocaleTimeString();
+        debugLines.push(`[${time}] ${msg}`);
+        if (debugLines.length > 30) debugLines.shift();
+        debugEl.textContent = debugLines.join("\n");
+        debugEl.scrollTop = debugEl.scrollHeight;
+      }
+      document.getElementById("debugButton").onclick = () => {
+        debugEl.classList.toggle("visible");
+      };
 
       /* ============================================================
          BACKGROUND IMAGES
@@ -636,7 +665,7 @@
       function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
       /* ============================================================
-         PLAYER  (BIGGER SIZE)
+         PLAYER
       ============================================================ */
       class Player {
         constructor(id, username, avatar, team) {
@@ -644,7 +673,7 @@
           this.username = username || "viewer";
           this.team = team;
           this.kills = 0;
-          this.radius = 45;               // ← CHANGED: was 20 (much bigger base size)
+          this.radius = 45;
           this.hp = 250;
           this.maxHp = 250;
           this.damage = 5;
@@ -664,7 +693,7 @@
 
         grow() {
           this.kills++;
-          this.radius = Math.min(70, 55 + this.kills * 2);   // ← CHANGED: bigger cap & growth
+          this.radius = Math.min(70, 55 + this.kills * 2);
           this.maxHp = Math.max(this.maxHp, 250 + this.kills * 15);
           this.hp = Math.min(this.maxHp, this.hp + 30);
           this.damage = 5 + this.kills * 1.2;
@@ -713,9 +742,9 @@
         draw() {
           ctx.save();
           const barWidth = this.radius * 2;
-          const barHeight = 18;                                  // ← CHANGED: was 10
+          const barHeight = 18;
           const barX = this.x - this.radius;
-          const barY = this.y - this.radius - 35;                // ← CHANGED: was -25
+          const barY = this.y - this.radius - 35;
           ctx.fillStyle = "#333";
           ctx.fillRect(barX, barY, barWidth, barHeight);
           ctx.fillStyle = "#39ff14";
@@ -723,12 +752,12 @@
           ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
 
           ctx.textAlign = "center";
-          ctx.font = "bold " + Math.max(22, Math.min(40, this.radius * 0.6)) + "px Arial"; // ← CHANGED
+          ctx.font = "bold " + Math.max(22, Math.min(40, this.radius * 0.6)) + "px Arial";
           ctx.fillStyle = this.team === "A" ? "#111" : "#fff";
           let displayName = this.username;
           if (displayName.length > 12) displayName = displayName.substring(0, 12) + "...";
           ctx.fillText(displayName + "  💀" + this.kills,
-                       this.x, this.y - this.radius - 52);       // ← CHANGED: was -38
+                       this.x, this.y - this.radius - 52);
 
           ctx.save();
           ctx.beginPath();
@@ -761,12 +790,14 @@
         const existing = players.find((p) => p.id === username);
         if (existing) {
           existing.hp = Math.min(existing.maxHp, existing.hp + 20);
+          logDebug(`Already joined: ${username} (${existing.team})`);
           return;
         }
         const player = new Player(username, username, avatar, team);
         players.push(player);
         createJoinEffect(player);
         updateStatus();
+        logDebug(`+ ${username} joined TEAM ${team}`);
       }
 
       function createJoinEffect(player) {
@@ -2387,49 +2418,124 @@
       }
 
       /* ============================================================
-         TIKFINITY WEBSOCKET
+         TIKFINITY WEBSOCKET  (improved, defensive)
       ============================================================ */
       let socket = null;
+
       function connectTikFinity() {
         try {
           socket = new WebSocket("ws://localhost:21213/");
+
           socket.onopen = () => {
             document.getElementById("status").textContent = "TikFinity connected";
+            logDebug("WS CONNECTED");
           };
+
           socket.onmessage = (event) => {
             let data;
-            try { data = JSON.parse(event.data); } catch (e) { return; }
-            if (data.event === "chat") handleChat(data);
-            if (data.event === "gift") handleGift(data);
+            try {
+              data = JSON.parse(event.data);
+            } catch (e) {
+              logDebug("Non-JSON: " + String(event.data).slice(0, 120));
+              return;
+            }
+
+            logDebug("EVENT: " + data.event + " | " +
+                     JSON.stringify(data.data || {}).slice(0, 160));
+
+            const evt = (data.event || data.type || "").toLowerCase();
+
+            if (evt === "chat" || evt === "comment") {
+              handleChat(data);
+            } else if (evt === "gift") {
+              handleGift(data);
+            }
           };
+
           socket.onerror = () => {
             document.getElementById("status").textContent =
               "TikFinity not connected - test mode";
+            logDebug("WS ERROR");
           };
+
           socket.onclose = () => {
             document.getElementById("status").textContent =
               "TikFinity disconnected - test mode";
+            logDebug("WS CLOSED");
           };
-        } catch (error) { console.log("WebSocket unavailable", error); }
+        } catch (error) {
+          console.log("WebSocket unavailable", error);
+          logDebug("WS THROW: " + error.message);
+        }
+      }
+
+      // Helper: pull a value from possibly-nested objects
+      function pick(obj, ...keys) {
+        if (!obj) return undefined;
+        for (const k of keys) {
+          if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+            return obj[k];
+          }
+        }
+        return undefined;
       }
 
       function handleChat(data) {
-        const info = data.data || {};
-        const username = info.uniqueId || info.nickname || "viewer";
-        const comment = String(info.comment || "").trim().toLowerCase();
-        const avatar = info.profilePictureUrl || DEFAULT_AVATAR;
-        if (comment === "a") addPlayer(username, avatar, "A");
-        else if (comment === "b") addPlayer(username, avatar, "B");
+        // data.data might itself be wrapped. Try common shapes.
+        const info = data.data || data;
+
+        const username = pick(
+          info,
+          "uniqueId", "userId", "unique_id", "user_id",
+          "nickname", "nickName", "nick_name", "displayName"
+        ) || "viewer";
+
+        const comment = String(
+          pick(info, "comment", "text", "message", "content") || ""
+        ).trim().toLowerCase();
+
+        const avatar = pick(
+          info,
+          "profilePictureUrl", "profilePicture", "avatarUrl",
+          "profile_picture_url", "avatar"
+        ) || DEFAULT_AVATAR;
+
+        logDebug(`CHAT user=${username} comment="${comment}"`);
+
+        if (comment === "a" || comment === "a " || comment === "team a") {
+          addPlayer(username, avatar, "A");
+        } else if (comment === "b" || comment === "b " || comment === "team b") {
+          addPlayer(username, avatar, "B");
+        }
       }
 
       function handleGift(data) {
-        const info = data.data || {};
-        const username = info.uniqueId || "viewer";
-        const giftName = info.giftName || info.gift_name || "";
-        const coins = parseInt(info.diamondCount) || 1;
+        const info = data.data || data;
+
+        const username = pick(
+          info,
+          "uniqueId", "userId", "unique_id", "user_id", "nickname", "nickName"
+        ) || "viewer";
+
+        const giftName = String(pick(
+          info, "giftName", "gift_name", "giftId", "gift_id"
+        ) || "");
+
+        const coinsRaw = pick(
+          info,
+          "diamondCount", "diamonds", "coins",
+          "diamond_count", "giftDiamondCount"
+        );
+        const coins = parseInt(coinsRaw) || 1;
+
+        logDebug(`GIFT user=${username} name="${giftName}" coins=${coins}`);
+
         const player = players.find((p) => p.id === username);
-        let team = player ? player.team : (Math.random() > 0.5 ? "A" : "B");
-        giftAttack(coins, team, giftName);
+        if (!player) {
+          logDebug(`Gift ignored - user ${username} not on a team`);
+          return;
+        }
+        giftAttack(coins, player.team, giftName);
       }
 
       /* ============================================================
@@ -2467,6 +2573,7 @@
         players = []; bullets = []; effects = [];
         screenShake = 0; bannerLife = 0;
         updateStatus();
+        logDebug("RESET");
       };
 
       /* ============================================================
