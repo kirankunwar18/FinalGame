@@ -12,22 +12,15 @@
         background: #111; overflow: hidden; font-family: Arial, sans-serif;
       }
       #game-wrapper {
-        width: 100vw;
-        height: 100vh;
-        margin: auto;
-        position: relative;
-        overflow: hidden;
-        background: #111;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        width: 100vw; height: 100vh;
+        margin: auto; position: relative;
+        overflow: hidden; background: #111;
+        display: flex; align-items: center; justify-content: center;
       }
       canvas {
         display: block;
-        max-width: 100%;
-        max-height: 100%;
-        width: auto;
-        height: auto;
+        max-width: 100%; max-height: 100%;
+        width: auto; height: auto;
         aspect-ratio: 9 / 16;
         object-fit: contain;
       }
@@ -36,7 +29,12 @@
         z-index: 20; padding: 8px 12px;
         background: rgba(0,0,0,0.65); color: white;
         border-radius: 8px; font-size: 13px; text-align: center;
+        font-weight: bold;
+        transition: background 0.3s, color 0.3s;
       }
+      #status.connected { background: rgba(20,120,40,0.85); color: #b6ffb6; }
+      #status.disconnected { background: rgba(140,20,20,0.85); color: #ffc0c0; }
+      #status.connecting { background: rgba(140,110,20,0.85); color: #ffe9a0; }
       #debug {
         position: absolute; top: 50px; left: 10px; right: 10px;
         z-index: 25; padding: 8px 12px;
@@ -94,21 +92,18 @@
       canvas.width = GAME_WIDTH;
       canvas.height = GAME_HEIGHT;
 
+      const START_HP = 250;
+      const MAX_HP_CAP = 5000;
+
       function fitCanvas() {
         const wrapper = document.getElementById("game-wrapper");
         const wW = wrapper.clientWidth;
         const wH = wrapper.clientHeight;
         const gameRatio = GAME_WIDTH / GAME_HEIGHT;
         const screenRatio = wW / wH;
-
         let cssW, cssH;
-        if (screenRatio > gameRatio) {
-          cssH = wH;
-          cssW = wH * gameRatio;
-        } else {
-          cssW = wW;
-          cssH = wW / gameRatio;
-        }
+        if (screenRatio > gameRatio) { cssH = wH; cssW = wH * gameRatio; }
+        else { cssW = wW; cssH = wW / gameRatio; }
         canvas.style.width = cssW + "px";
         canvas.style.height = cssH + "px";
       }
@@ -674,9 +669,9 @@
           this.team = team;
           this.kills = 0;
           this.radius = 45;
-          this.hp = 250;
-          this.maxHp = 250;
-          this.damage = 5;
+          this.hp = START_HP;
+          this.maxHp = START_HP;
+          this.damage = 1;
           this.bulletSize = 5;
           this.speed = random(0.2, 0.6);
           this.lastShot = 0;
@@ -694,10 +689,18 @@
         grow() {
           this.kills++;
           this.radius = Math.min(70, 55 + this.kills * 2);
-          this.maxHp = Math.max(this.maxHp, 250 + this.kills * 15);
+          this.maxHp = Math.min(MAX_HP_CAP, Math.max(this.maxHp, START_HP + this.kills * 15));
           this.hp = Math.min(this.maxHp, this.hp + 30);
-          this.damage = 5 + this.kills * 1.2;
+          this.hp = Math.min(this.maxHp, this.hp + 25);
+          this.damage = 1;
           this.bulletSize = Math.min(10, 5 + this.kills * 0.25);
+        }
+
+        heal(amount) {
+          if (this.hp <= 0) return 0;
+          const before = this.hp;
+          this.hp = Math.min(this.maxHp, this.hp + amount);
+          return this.hp - before;
         }
 
         findEnemy() {
@@ -805,19 +808,60 @@
                        team: player.team, life: 60, maxLife: 60 });
       }
 
+      /* ============================================================
+         SENDER ORIGIN HELPERS
+      ============================================================ */
+      function getSenderOrigin(senderId, senderTeam) {
+        const sender = players.find(p => p.id === senderId && p.hp > 0);
+        if (sender) return { x: sender.x, y: sender.y, player: sender };
+        return {
+          x: senderTeam === "A" ? random(30, 300) : random(780, 1050),
+          y: random(300, 1600),
+          player: null,
+        };
+      }
+
+      // Spawns a launch pulse + icon at the sender's avatar
+      function spawnGiftLaunch(senderId, senderTeam, icon) {
+        const origin = getSenderOrigin(senderId, senderTeam);
+        effects.push({
+          type: "giftLaunch",
+          x: origin.x,
+          y: origin.y,
+          team: senderTeam,
+          icon: icon || "✨",
+          life: 45, maxLife: 45,
+          playerRef: origin.player,
+        });
+        if (origin.player) {
+          effects.push({
+            type: "senderGlow",
+            playerRef: origin.player,
+            team: senderTeam,
+            life: 120, maxLife: 120,
+          });
+        }
+        return origin;
+      }
+
       function fireMissiles({ senderTeam, targets, count, damage,
                               missileType, bannerText: bText,
-                              bannerTeam: bTeam, shake }) {
+                              bannerTeam: bTeam, senderId }) {
         bannerText = bText;
         bannerTeam = bTeam;
         bannerLife = bannerMaxLife;
+
+        const sender = players.find(p => p.id === senderId && p.hp > 0);
+
         for (let i = 0; i < count; i++) {
           const target = targets[Math.floor(Math.random() * targets.length)];
-          const startX = senderTeam === "A" ? random(30, 300) : random(780, 1050);
-          const startY = random(300, 1600);
+          const startX = sender ? sender.x
+            : (senderTeam === "A" ? random(30, 300) : random(780, 1050));
+          const startY = sender ? sender.y : random(300, 1600);
           const angle = Math.atan2(target.y - startY, target.x - startX);
           bullets.push({
             x: startX, y: startY, team: senderTeam, ownerId: "__gift__",
+            senderId,
             targetId: target.id, angle, speed: 18, damage, size: 14,
             missileType,
           });
@@ -830,8 +874,47 @@
       function updateBullets() {
         for (let i = bullets.length - 1; i >= 0; i--) {
           const bullet = bullets[i];
-          bullet.x += Math.cos(bullet.angle) * bullet.speed;
-          bullet.y += Math.sin(bullet.angle) * bullet.speed;
+
+          const isRose = bullet.ownerId === "__gift__" && bullet.missileType === "rose";
+
+          if (isRose && bullet.spiral) {
+            bullet.spiralFrames = (bullet.spiralFrames || 0) + 1;
+
+            if (bullet.spiralFrames < bullet.spiralDiveAt) {
+              bullet.spiralAngle += bullet.spiralSpeed * bullet.spiralDirection;
+              bullet.x = bullet.spiralCenterX +
+                         Math.cos(bullet.spiralAngle) * bullet.spiralRadius;
+              bullet.y = bullet.spiralCenterY +
+                         Math.sin(bullet.spiralAngle) * bullet.spiralRadius;
+              bullet.spin = (bullet.spin || 0) + 0.15;
+
+              if (Math.random() < 0.5) {
+                effects.push({
+                  type: "rosePetal",
+                  x: bullet.x, y: bullet.y,
+                  team: bullet.team,
+                  life: 30, maxLife: 30,
+                });
+              }
+            } else {
+              const target = players.find(p => p.id === bullet.targetId && p.hp > 0);
+              if (target) {
+                const dx = target.x - bullet.x;
+                const dy = target.y - bullet.y;
+                const wantAngle = Math.atan2(dy, dx);
+                let diff = wantAngle - bullet.angle;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                bullet.angle += diff * 0.3;
+              }
+              bullet.x += Math.cos(bullet.angle) * (bullet.speed + 10);
+              bullet.y += Math.sin(bullet.angle) * (bullet.speed + 10);
+              bullet.spin = (bullet.spin || 0) + 0.4;
+            }
+          } else {
+            bullet.x += Math.cos(bullet.angle) * bullet.speed;
+            bullet.y += Math.sin(bullet.angle) * bullet.speed;
+          }
 
           if (bullet.x < -80 || bullet.x > GAME_WIDTH + 80 ||
               bullet.y < -80 || bullet.y > GAME_HEIGHT + 80) {
@@ -870,6 +953,31 @@
                 x: bullet.x - Math.cos(bullet.angle) * 20,
                 y: bullet.y - Math.sin(bullet.angle) * 20,
                 life: 20, maxLife: 20,
+              });
+            }
+          }
+          else if (isGift && bullet.missileType === "rose") {
+            const spinTime = Date.now() * 0.008;
+            const baseSpin = bullet.spin || 0;
+            ctx.save();
+            ctx.rotate(baseSpin + spinTime);
+            ctx.shadowColor = bullet.team === "A"
+              ? "rgba(255,80,120,0.9)"
+              : "rgba(80,200,255,0.9)";
+            ctx.shadowBlur = 22;
+            ctx.font = `${bullet.size * 2.2}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("🌹", 0, 0);
+            ctx.restore();
+
+            if (Math.random() < 0.6) {
+              effects.push({
+                type: "rosePetal",
+                x: bullet.x - Math.cos(bullet.angle) * 18,
+                y: bullet.y - Math.sin(bullet.angle) * 18,
+                team: bullet.team,
+                life: 25, maxLife: 25,
               });
             }
           }
@@ -931,6 +1039,8 @@
 
           if (hit) {
             hit.hp -= bullet.damage;
+            createDamageNumber(hit.x, hit.y, Math.round(bullet.damage));
+
             const hitPan = panForTeamRandom(hit.team);
             if (isGift) {
               createExplosion(hit.x, hit.y, hit.team);
@@ -941,6 +1051,12 @@
             if (hit.hp <= 0) {
               const killer = players.find((p) => p.id === bullet.ownerId);
               if (killer) killer.grow();
+              if (isGift && bullet.senderId) {
+                const sender = players.find((p) => p.id === bullet.senderId);
+                if (sender && sender.id !== (killer && killer.id)) {
+                  sender.grow();
+                }
+              }
               createKillEffect(hit);
               playKillSound(hitPan);
             }
@@ -973,6 +1089,7 @@
           life: 60, maxLife: 60,
         });
       }
+      function createHealNumber() { /* silent on purpose */ }
 
       function drawLightningArc(x1, y1, x2, y2, alpha) {
         if (alpha <= 0) return;
@@ -1018,7 +1135,51 @@
               effect.type !== "vortexPull" &&
               effect.type !== "vortexSpiral" &&
               effect.type !== "deathSaw" &&
-              effect.type !== "meteor") continue;
+              effect.type !== "meteor" &&
+              effect.type !== "deathSawEmerge") continue;
+
+          /* ===== giftLaunch pulse at sender ===== */
+          if (effect.type === "giftLaunch") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+
+            const r = 20 + progress * 150;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
+            ctx.strokeStyle = effect.team === "A"
+              ? `rgba(255,80,120,${alpha})`
+              : `rgba(80,200,255,${alpha})`;
+            ctx.lineWidth = 10 * (1 - progress) + 2;
+            ctx.stroke();
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.font = "80px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
+            ctx.shadowBlur = 30;
+            ctx.fillText(effect.icon, effect.x, effect.y - progress * 90);
+            ctx.restore();
+          }
+
+          /* ===== senderGlow ring on sender's avatar ===== */
+          if (effect.type === "senderGlow") {
+            const p = effect.playerRef;
+            if (!p || p.hp <= 0) continue;
+            const alpha = Math.min(1, effect.life / 40);
+            const r = p.radius + 18 + Math.sin(Date.now() * 0.012) * 6;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+            ctx.strokeStyle = effect.team === "A"
+              ? `rgba(255,80,120,${alpha})`
+              : `rgba(80,200,255,${alpha})`;
+            ctx.lineWidth = 6;
+            ctx.shadowColor = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
+            ctx.shadowBlur = 25;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+          }
 
           if (effect.type === "join") {
             const radius = 30 + progress * 120;
@@ -1091,6 +1252,19 @@
             ctx.restore();
           }
 
+          if (effect.type === "rosePetal") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            ctx.save();
+            ctx.globalAlpha = alpha * 0.8;
+            ctx.font = "18px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
+            ctx.fillText("🌸", effect.x, effect.y);
+            ctx.restore();
+          }
+
           if (effect.type === "emojiParticle") {
             effect.x += effect.vx;
             effect.y += effect.vy;
@@ -1118,13 +1292,13 @@
           if (effect.type === "damageNumber") {
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
-            const y = effect.y - progress * 60;
+            const y = effect.y - progress * 40;
             ctx.save();
             ctx.globalAlpha = alpha;
             ctx.textAlign = "center";
-            ctx.font = "bold 42px Arial";
+            ctx.font = "bold 32px Arial";
             ctx.strokeStyle = "#000";
-            ctx.lineWidth = 5;
+            ctx.lineWidth = 4;
             ctx.strokeText("-" + effect.amount, effect.x, y);
             ctx.fillStyle = "#ff3030";
             ctx.fillText("-" + effect.amount, effect.x, y);
@@ -1157,26 +1331,111 @@
             ctx.restore();
           }
 
+          /* ===== GHOST WITH EMERGE PHASE ===== */
           if (effect.type === "huntingGhost") {
+            effect.stageTimer = (effect.stageTimer || 0) + 1;
+
+            // EMERGE PHASE
+            if (effect.phase === "emerging") {
+              const p = Math.min(1, effect.stageTimer / effect.emergeDuration);
+              const sender = effect.senderRef;
+              if (!sender || sender.hp <= 0) { effect.life = 0; continue; }
+
+              // Stay at sender's position, grow from 0 to full size
+              effect.x = sender.x;
+              effect.y = sender.y;
+              effect.emergeProgress = p;
+
+              const size = 90 * p;
+              ctx.save();
+              ctx.shadowColor = "#88ffbb";
+              ctx.shadowBlur = 40 * p;
+              ctx.font = `${size}px Arial`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.globalAlpha = p;
+              ctx.fillStyle = "#ffffff";
+              ctx.fillText("👻", effect.x, effect.y);
+              ctx.restore();
+
+              // Emerge ring
+              ctx.save();
+              ctx.globalAlpha = (1 - p) * 0.8;
+              ctx.beginPath();
+              ctx.arc(effect.x, effect.y, 30 + p * 80, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(136,255,187,${1 - p})`;
+              ctx.lineWidth = 8 * (1 - p) + 2;
+              ctx.stroke();
+              ctx.restore();
+
+              if (p >= 1) {
+                effect.phase = "flying";
+                effect.stageTimer = 0;
+              }
+              continue;
+            }
+
+            // FLYING PHASE (existing logic)
             const huntList = effect.huntList || [];
             if (huntList.length === 0) continue;
+
             while (effect.currentIndex < huntList.length &&
                    (!huntList[effect.currentIndex] ||
                     huntList[effect.currentIndex].hp <= 0)) {
               effect.currentIndex++;
             }
+
             if (effect.currentIndex >= huntList.length) {
               effect.life = Math.min(effect.life, 20);
               continue;
             }
+
             const target = huntList[effect.currentIndex];
             const dx = target.x - effect.x;
             const dy = target.y - effect.y;
             const dist = Math.hypot(dx, dy);
-            if (dist < 8) { effect.currentIndex++; continue; }
             const speed = 14;
-            effect.x += (dx / dist) * speed;
-            effect.y += (dy / dist) * speed;
+
+            if (dist < speed + 4) {
+              if (target.hp > 0) {
+                const DMG = 2;
+                target.hp -= DMG;
+                createDamageNumber(target.x, target.y, DMG);
+
+                if (effect.senderId) {
+                  const sender = players.find(p => p.id === effect.senderId && p.hp > 0);
+                  if (sender) sender.heal(5);
+                }
+
+                effects.push({
+                  type: "ghostTag",
+                  x: target.x, y: target.y,
+                  team: target.team,
+                  life: 60, maxLife: 60,
+                });
+                for (let k = 0; k < 3; k++) {
+                  const a = Math.random() * Math.PI * 2;
+                  effects.push({
+                    type: "emojiParticle",
+                    x: target.x, y: target.y,
+                    vx: Math.cos(a) * random(3, 6),
+                    vy: Math.sin(a) * random(3, 6) - 2,
+                    emoji: Math.random() < 0.5 ? "👻" : "💀",
+                    life: 60, maxLife: 60,
+                  });
+                }
+                if (target.hp <= 0) {
+                  createKillEffect(target);
+                  playKillSound(panForTeamRandom(target.team));
+                  rewardSenderForGiftKill(effect.senderId, 25);
+                }
+              }
+              effect.hitsDone = (effect.hitsDone || 0) + 1;
+              effect.currentIndex++;
+            } else {
+              effect.x += (dx / dist) * speed;
+              effect.y += (dy / dist) * speed;
+            }
 
             effect.trail = effect.trail || [];
             effect.trail.push({ x: effect.x, y: effect.y });
@@ -1242,16 +1501,26 @@
               const p = effect.stageTimer / strikeDuration;
               const first = chainList[0];
               if (!first || first.hp <= 0) continue;
+
+              const sender = players.find(pl => pl.id === effect.senderId && pl.hp > 0);
+              const startX = sender ? sender.x : first.x;
+              const startY = sender ? sender.y : 0;
+
               ctx.save();
               ctx.strokeStyle = `rgba(180,220,255,${1 - p})`;
               ctx.lineWidth = 14;
               ctx.beginPath();
-              ctx.moveTo(first.x, 0);
-              let cx = first.x;
-              for (let k = 1; k <= 8; k++) {
-                cx = first.x + (Math.random() - 0.5) * 60;
-                ctx.lineTo(cx, (first.y / 8) * k);
+              ctx.moveTo(startX, startY);
+              const segments = 12;
+              for (let k = 1; k <= segments; k++) {
+                const t = k / segments;
+                const tx = startX + (first.x - startX) * t +
+                           (Math.random() - 0.5) * 60;
+                const ty = startY + (first.y - startY) * t +
+                           (Math.random() - 0.5) * 60;
+                ctx.lineTo(tx, ty);
               }
+              ctx.lineTo(first.x, first.y);
               ctx.stroke();
               ctx.strokeStyle = `rgba(255,255,255,${1 - p})`;
               ctx.lineWidth = 5;
@@ -1276,12 +1545,43 @@
 
             if (effect.phase === "arcing") {
               const alive = chainList.filter(t => t.hp > 0);
+              effect.arcingCooldowns = effect.arcingCooldowns || {};
+
               for (let a = 0; a < alive.length; a++) {
                 for (let b = a + 1; b < alive.length; b++) {
-                  if (Math.random() < 0.7)
-                    drawLightningArc(alive[a].x, alive[a].y,
-                                     alive[b].x, alive[b].y,
+                  if (Math.random() < 0.7) {
+                    const ta = alive[a];
+                    const tb = alive[b];
+
+                    drawLightningArc(ta.x, ta.y, tb.x, tb.y,
                                      0.5 + Math.random() * 0.3);
+
+                    const key = ta.id + "|" + tb.id;
+                    const lastHit = effect.arcingCooldowns[key] || 0;
+                    if (effect.stageTimer - lastHit > 6) {
+                      effect.arcingCooldowns[key] = effect.stageTimer;
+
+                      if (ta.hp > 0) {
+                        ta.hp -= 1;
+                        createDamageNumber(ta.x, ta.y, 1);
+                        if (ta.hp <= 0) {
+                          createKillEffect(ta);
+                          playKillSound(panForTeamRandom(ta.team));
+                          rewardSenderForGiftKill(effect.senderId, 25);
+                        }
+                      }
+
+                      if (tb.hp > 0) {
+                        tb.hp -= 1;
+                        createDamageNumber(tb.x, tb.y, 1);
+                        if (tb.hp <= 0) {
+                          createKillEffect(tb);
+                          playKillSound(panForTeamRandom(tb.team));
+                          rewardSenderForGiftKill(effect.senderId, 25);
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -1305,6 +1605,295 @@
             ctx.restore();
           }
 
+          /* ===== MEGA STRIKE / DEATH SAW WITH EMERGE PHASE ===== */
+          if (effect.type === "deathSawEmerge") {
+            effect.stageTimer = (effect.stageTimer || 0) + 1;
+            const st = effect.stageTimer;
+
+            // PHASE 1: EMERGE at sender's avatar
+            if (effect.phase === "emerging") {
+              const p = Math.min(1, st / effect.emergeDuration);
+              const sender = effect.senderRef;
+              if (!sender || sender.hp <= 0) { effect.life = 0; continue; }
+
+              effect.x = sender.x;
+              effect.y = sender.y;
+              effect.bladeAngle = (effect.bladeAngle || 0) + 0.5;
+              effect.currentSize = 85 * p;
+              effect.currentTeeth = Math.max(1, Math.floor(10 * p));
+
+              // Draw emerging saw at sender
+              ctx.save();
+              ctx.translate(effect.x, effect.y);
+              ctx.rotate(effect.bladeAngle);
+              ctx.shadowColor = "#ff00ff";
+              ctx.shadowBlur = 40 * p;
+
+              ctx.beginPath();
+              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(20,0,40,0.9)";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(220,220,240,${p})`;
+              ctx.lineWidth = 10 * p;
+              ctx.stroke();
+
+              for (let b = 0; b < effect.currentTeeth; b++) {
+                const toothAngle = (Math.PI * 2 * b) / Math.max(1, effect.currentTeeth);
+                const toothStartX = Math.cos(toothAngle) * (effect.currentSize - 5);
+                const toothStartY = Math.sin(toothAngle) * (effect.currentSize - 5);
+                const toothTipX = Math.cos(toothAngle) * (effect.currentSize + 30 * p);
+                const toothTipY = Math.sin(toothAngle) * (effect.currentSize + 30 * p);
+                const perpAngle = toothAngle + Math.PI / 2;
+                const perpX = Math.cos(perpAngle) * 18 * p;
+                const perpY = Math.sin(perpAngle) * 18 * p;
+
+                ctx.beginPath();
+                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
+                ctx.lineTo(toothTipX, toothTipY);
+                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
+                ctx.closePath();
+                ctx.fillStyle = `rgba(240,240,255,${p})`;
+                ctx.fill();
+              }
+
+              ctx.beginPath();
+              ctx.arc(0, 0, 30 * p, 0, Math.PI * 2);
+              ctx.fillStyle = "#ff00ff";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, 15 * p, 0, Math.PI * 2);
+              ctx.fillStyle = "#ffffff";
+              ctx.fill();
+              ctx.restore();
+
+              // Emerge ring
+              ctx.save();
+              ctx.globalAlpha = (1 - p) * 0.7;
+              ctx.beginPath();
+              ctx.arc(effect.x, effect.y, 30 + p * 100, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(255,0,255,${1 - p})`;
+              ctx.lineWidth = 8 * (1 - p) + 2;
+              ctx.stroke();
+              ctx.restore();
+
+              if (p >= 1) {
+                effect.phase = "flying";
+                effect.stageTimer = 0;
+              }
+              continue;
+            }
+
+            // PHASE 2: FLYING to enemy center while growing
+            if (effect.phase === "flying") {
+              const p = Math.min(1, st / effect.flyDuration);
+              const sx = effect.startX;
+              const sy = effect.startY;
+              const tx = effect.centerX;
+              const ty = effect.centerY;
+
+              effect.x = sx + (tx - sx) * p;
+              effect.y = sy + (ty - sy) * p;
+              effect.bladeAngle = (effect.bladeAngle || 0) + 0.6;
+              effect.currentSize = 85 * p;
+              effect.currentTeeth = Math.max(1, Math.floor(10 * p));
+
+              // Draw flying saw
+              ctx.save();
+              ctx.translate(effect.x, effect.y);
+              ctx.rotate(effect.bladeAngle);
+              ctx.shadowColor = "#ff00ff";
+              ctx.shadowBlur = 40;
+
+              ctx.beginPath();
+              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(20,0,40,0.9)";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
+              ctx.strokeStyle = "rgba(220,220,240,1)";
+              ctx.lineWidth = 10;
+              ctx.stroke();
+
+              for (let b = 0; b < effect.currentTeeth; b++) {
+                const toothAngle = (Math.PI * 2 * b) / Math.max(1, effect.currentTeeth);
+                const toothStartX = Math.cos(toothAngle) * (effect.currentSize - 5);
+                const toothStartY = Math.sin(toothAngle) * (effect.currentSize - 5);
+                const toothTipX = Math.cos(toothAngle) * (effect.currentSize + 30);
+                const toothTipY = Math.sin(toothAngle) * (effect.currentSize + 30);
+                const perpAngle = toothAngle + Math.PI / 2;
+                const perpX = Math.cos(perpAngle) * 18;
+                const perpY = Math.sin(perpAngle) * 18;
+
+                ctx.beginPath();
+                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
+                ctx.lineTo(toothTipX, toothTipY);
+                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
+                ctx.closePath();
+                ctx.fillStyle = "rgba(240,240,255,1)";
+                ctx.fill();
+              }
+
+              ctx.beginPath();
+              ctx.arc(0, 0, 30, 0, Math.PI * 2);
+              ctx.fillStyle = "#ff00ff";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, 15, 0, Math.PI * 2);
+              ctx.fillStyle = "#ffffff";
+              ctx.fill();
+              ctx.restore();
+
+              // Trail
+              if (Math.random() < 0.5) {
+                effects.push({
+                  type: "spark",
+                  x: effect.x + random(-30, 30),
+                  y: effect.y + random(-30, 30),
+                  team: effect.sourceTeam,
+                  life: 15, maxLife: 15,
+                });
+              }
+
+              if (p >= 1) {
+                // Transition to active death saw
+                effect.phase = "active";
+                effect.stageTimer = 0;
+              }
+              continue;
+            }
+
+            // PHASE 3: ACTIVE (existing deathSaw logic, but effect type stays "deathSawEmerge")
+            if (effect.phase === "active") {
+              const sawSize = 85;
+              const teethCount = 10;
+              const zoneR = effect.zoneRadius || 220;
+              const tickEvery = effect.tickEvery || 10;
+              const dmgPerTick = effect.damagePerTick || 15;
+
+              effect.bladeAngle = (effect.bladeAngle || 0) + 0.4;
+
+              // Zone ring
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(effect.centerX, effect.centerY, zoneR, 0, Math.PI * 2);
+              ctx.strokeStyle = "rgba(255,0,255,0.5)";
+              ctx.lineWidth = 6;
+              ctx.setLineDash([20, 14]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.fillStyle = "rgba(255,0,255,0.06)";
+              ctx.fill();
+              ctx.restore();
+
+              // Saw at enemy center
+              ctx.save();
+              ctx.translate(effect.x, effect.y);
+              ctx.rotate(effect.bladeAngle);
+              ctx.shadowColor = "#ff00ff";
+              ctx.shadowBlur = 40;
+
+              ctx.beginPath();
+              ctx.arc(0, 0, sawSize, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(20,0,40,0.9)";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, sawSize, 0, Math.PI * 2);
+              ctx.strokeStyle = "rgba(220,220,240,1)";
+              ctx.lineWidth = 10;
+              ctx.stroke();
+
+              for (let b = 0; b < teethCount; b++) {
+                const toothAngle = (Math.PI * 2 * b) / teethCount;
+                const toothStartX = Math.cos(toothAngle) * (sawSize - 5);
+                const toothStartY = Math.sin(toothAngle) * (sawSize - 5);
+                const toothTipX = Math.cos(toothAngle) * (sawSize + 30);
+                const toothTipY = Math.sin(toothAngle) * (sawSize + 30);
+                const perpAngle = toothAngle + Math.PI / 2;
+                const perpX = Math.cos(perpAngle) * 18;
+                const perpY = Math.sin(perpAngle) * 18;
+
+                ctx.beginPath();
+                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
+                ctx.lineTo(toothTipX, toothTipY);
+                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
+                ctx.closePath();
+                const toothGrad = ctx.createLinearGradient(
+                  toothStartX, toothStartY, toothTipX, toothTipY);
+                toothGrad.addColorStop(0, "rgba(240,240,255,1)");
+                toothGrad.addColorStop(1, "rgba(180,180,220,0.9)");
+                ctx.fillStyle = toothGrad;
+                ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.9)";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+              }
+
+              ctx.shadowColor = "#ff00ff";
+              ctx.shadowBlur = 30;
+              ctx.beginPath();
+              ctx.arc(0, 0, 30, 0, Math.PI * 2);
+              ctx.fillStyle = "#ff00ff";
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(0, 0, 15, 0, Math.PI * 2);
+              ctx.fillStyle = "#ffffff";
+              ctx.fill();
+              ctx.restore();
+
+              // Damage ticks
+              if (st % tickEvery === 0) {
+                for (const p of players) {
+                  if (p.team !== effect.team) continue;
+                  if (p.hp <= 0) continue;
+                  const d = Math.hypot(p.x - effect.centerX, p.y - effect.centerY);
+                  if (d <= zoneR) {
+                    p.hp -= dmgPerTick;
+                    createExplosion(p.x, p.y, p.team);
+                    createDamageNumber(p.x, p.y, dmgPerTick);
+                    effects.push({
+                      type: "bladeCut",
+                      x: p.x, y: p.y,
+                      team: p.team,
+                      life: 40, maxLife: 40,
+                    });
+                    playMeteorImpact(p.team, 0.4);
+                    if (p.hp <= 0) {
+                      createKillEffect(p);
+                      playKillSound(panForTeamRandom(p.team));
+                      rewardSenderForGiftKill(effect.senderId, 25);
+                    }
+                  }
+                }
+              }
+
+              if (effect.life <= 5 && !effect.finished) {
+                effect.finished = true;
+                effects.push({
+                  type: "bladeBurst",
+                  x: effect.x, y: effect.y,
+                  team: effect.team,
+                  life: 70, maxLife: 70,
+                });
+                for (let k = 0; k < 15; k++) {
+                  const a = (Math.PI * 2 * k) / 15;
+                  effects.push({
+                    type: "bladeShard",
+                    x: effect.x, y: effect.y,
+                    vx: Math.cos(a) * random(6, 14),
+                    vy: Math.sin(a) * random(6, 14),
+                    angle: a,
+                    team: effect.team,
+                    life: 80, maxLife: 80,
+                  });
+                }
+                playLaserFire(effect.sourceTeam, 0.5);
+              }
+            }
+          }
+
+          /* ===== Legacy deathSaw (for backward compat) ===== */
           if (effect.type === "deathSaw") {
             effect.stageTimer = (effect.stageTimer || 0) + 1;
             const st = effect.stageTimer;
@@ -1315,7 +1904,7 @@
             const teethCount = 10;
             const zoneR      = effect.zoneRadius || 220;
             const tickEvery  = effect.tickEvery || 10;
-            const dmgPerTick = effect.damagePerTick || 45;
+            const dmgPerTick = effect.damagePerTick || 15;
 
             ctx.save();
             ctx.beginPath();
@@ -1406,6 +1995,7 @@
                   if (p.hp <= 0) {
                     createKillEffect(p);
                     playKillSound(panForTeamRandom(p.team));
+                    rewardSenderForGiftKill(effect.senderId, 25);
                   }
                 }
               }
@@ -1517,17 +2107,17 @@
           if (effect.type === "meteor") {
             const p = progress;
             const startX = effect.startX;
-            const startY = -100;
+            const startY = effect.startY;
             const curX = startX + (effect.targetX - startX) * p;
             const curY = startY + (effect.targetY - startY) * p;
 
             ctx.save();
-            for (let k = 1; k <= 15; k++) {
-              const tp = Math.max(0, p - k * 0.03);
+            for (let k = 1; k <= 20; k++) {
+              const tp = Math.max(0, p - k * 0.035);
               const tx = startX + (effect.targetX - startX) * tp;
               const ty = startY + (effect.targetY - startY) * tp;
-              const alpha = (1 - k / 15) * (1 - p * 0.3);
-              const size = 40 - k * 2;
+              const alpha = (1 - k / 20) * (1 - p * 0.3);
+              const size = 45 - k * 2;
 
               ctx.beginPath();
               ctx.arc(tx, ty, size, 0, Math.PI * 2);
@@ -1555,11 +2145,79 @@
             ctx.arc(curX, curY, 25, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
+
+            if (progress >= 0.95 && !effect.exploded) {
+              effect.exploded = true;
+
+              const impactX = effect.targetX;
+              const impactY = effect.targetY;
+
+              const target = effect.targetRef;
+              if (target && target.hp > 0) {
+                const DMG = effect.damage || 15;
+                target.hp -= DMG;
+                createDamageNumber(target.x, target.y, DMG);
+
+                if (target.hp <= 0) {
+                  createKillEffect(target);
+                  playKillSound(panForTeamRandom(target.team));
+                  rewardSenderForGiftKill(effect.senderId, 25);
+                }
+              }
+
+              const splashR = effect.splashRadius || 180;
+              const splashDmg = effect.splashDamage || 8;
+              const enemyTeam = effect.team;
+
+              for (const p of players) {
+                if (p.team !== enemyTeam) continue;
+                if (p === target) continue;
+                if (p.hp <= 0) continue;
+                const d = Math.hypot(p.x - impactX, p.y - impactY);
+                if (d <= splashR) {
+                  p.hp -= splashDmg;
+                  createDamageNumber(p.x, p.y, splashDmg);
+
+                  if (p.hp <= 0) {
+                    createKillEffect(p);
+                    playKillSound(panForTeamRandom(p.team));
+                    rewardSenderForGiftKill(effect.senderId, 25);
+                  }
+                }
+              }
+
+              createExplosion(impactX, impactY, effect.team);
+              screenShake = Math.max(screenShake, 30);
+
+              if (effect.senderId) {
+                const sender = players.find((p) => p.id === effect.senderId && p.hp > 0);
+                if (sender) sender.heal(15);
+              }
+
+              effects.push({
+                type: "meteorImpact",
+                x: impactX, y: impactY,
+                team: effect.team,
+                life: 60, maxLife: 60,
+                splashRadius: splashR,
+              });
+              playMeteorImpact(effect.team, 0.5);
+            }
           }
 
           if (effect.type === "meteorImpact") {
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
+
+            if (progress < 0.6) {
+              const sr = progress * (effect.splashRadius || 180);
+              ctx.beginPath();
+              ctx.arc(effect.x, effect.y, sr, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(255,200,120,${alpha * 0.5})`;
+              ctx.lineWidth = 8 * (1 - progress) + 2;
+              ctx.stroke();
+            }
+
             for (let ring = 0; ring < 3; ring++) {
               const rp = Math.max(0, progress - ring * 0.12);
               const r = rp * (250 + ring * 80);
@@ -1880,33 +2538,101 @@
         }
       }
 
+      function rewardSenderForGiftKill(senderId, amount = 25) {
+        if (!senderId) return;
+        const sender = players.find((p) => p.id === senderId && p.hp > 0);
+        if (!sender) return;
+        sender.kills++;
+        sender.radius = Math.min(70, 55 + sender.kills * 2);
+        sender.maxHp = Math.min(
+          MAX_HP_CAP,
+          Math.max(sender.maxHp, START_HP + sender.kills * 15)
+        );
+        sender.hp = Math.min(sender.maxHp, sender.hp + amount);
+        sender.damage = 1;
+        sender.bulletSize = Math.min(10, 5 + sender.kills * 0.25);
+        logDebug(`GIFT KILL reward → ${sender.username} (+${amount} HP)`);
+      }
+
       /* ============================================================
          GIFT ATTACK
       ============================================================ */
-      function giftAttack(coins, senderTeam, giftName) {
+      function giftAttack(coins, senderTeam, giftName, senderId) {
         const enemyTeam = senderTeam === "A" ? "B" : "A";
         const targets = players.filter((p) => p.team === enemyTeam && p.hp > 0);
         if (targets.length === 0) return;
         const name = (giftName || "").toLowerCase();
 
+        // Determine launch icon by gift
+        let launchIcon = "✨";
+        if (name.includes("rose")) launchIcon = "🌹";
+        else if (name.includes("heart")) launchIcon = "💗";
+        else if (name.includes("mind")) launchIcon = "🧠";
+        else if (name.includes("ghost")) launchIcon = "👻";
+        else if (name.includes("lightning")) launchIcon = "⚡";
+        else if (coins >= 100 && coins < 500) launchIcon = "🪚";
+        else if (coins >= 500 && coins < 1000) launchIcon = "☄️";
+        else if (coins >= 1000) launchIcon = "💀";
+
+        // Spawn pulse + glow at sender's avatar
+        spawnGiftLaunch(senderId, senderTeam, launchIcon);
+
         if (name.includes("rose")) {
           playRoseSound(senderTeam);
-          const target = targets[Math.floor(Math.random() * targets.length)];
+          const lockedTarget = targets[Math.floor(Math.random() * targets.length)];
 
-          let startX;
-          if (senderTeam === "A") startX = random(30, 300);
-          else startX = random(780, 1050);
-          const startY = random(300, 1600);
+          const enemyCenterX = senderTeam === "A"
+            ? GAME_WIDTH * 0.75
+            : GAME_WIDTH * 0.25;
+          const enemyCenterY = GAME_HEIGHT / 2;
 
-          for (let i = 0; i < 5; i++) {
-            const mx = startX + random(-30, 30);
-            const my = startY + random(-30, 30);
-            const exactAngle = Math.atan2(target.y - my, target.x - mx);
-            bullets.push({
-              x: mx, y: my, team: senderTeam, ownerId: "__gift__",
-              targetId: target.id, angle: exactAngle,
-              speed: 18, damage: 2, size: 14, missileType: "rocket",
-            });
+          const ROSE_BULLETS = 5;
+          const STREAM_DELAY = 180;
+
+          for (let i = 0; i < ROSE_BULLETS; i++) {
+            setTimeout(() => {
+              if (!lockedTarget || lockedTarget.hp <= 0) return;
+
+              const origin = getSenderOrigin(senderId, senderTeam);
+              const startX = origin.x;
+              const startY = origin.y;
+
+              const angleToTarget = Math.atan2(
+                lockedTarget.y - startY,
+                lockedTarget.x - startX
+              );
+
+              bullets.push({
+                x: startX + random(-15, 15),
+                y: startY + random(-15, 15),
+                team: senderTeam,
+                ownerId: "__gift__",
+                senderId,
+                targetId: lockedTarget.id,
+                angle: angleToTarget,
+                speed: 22,
+                damage: 3,
+                size: 14,
+                missileType: "rose",
+                spin: Math.random() * Math.PI * 2,
+                spiral: true,
+                spiralCenterX: enemyCenterX,
+                spiralCenterY: enemyCenterY,
+                spiralRadius: 200 + Math.random() * 120,
+                spiralAngle: angleToTarget + (Math.random() < 0.5 ? 0.6 : -0.6),
+                spiralSpeed: 0.05 + Math.random() * 0.03,
+                spiralDirection: Math.random() < 0.5 ? 1 : -1,
+                spiralFrames: 0,
+                spiralDiveAt: 40 + Math.floor(Math.random() * 20),
+              });
+
+              effects.push({
+                type: "spark",
+                x: startX, y: startY,
+                team: senderTeam,
+                life: 15, maxLife: 15,
+              });
+            }, i * STREAM_DELAY);
           }
 
           bannerText = "🌹 ROSE ATTACK!";
@@ -1918,8 +2644,8 @@
         if (name.includes("heart me") || name.includes("heartme")) {
           playHeartSound(senderTeam);
           fireMissiles({
-            senderTeam, targets, count: 5, damage: 5, missileType: "heart",
-            bannerText: "💗 HEART ATTACK!", bannerTeam: senderTeam, shake: 0,
+            senderTeam, targets, count: 5, damage: 4, missileType: "heart",
+            bannerText: "💗 HEART ATTACK!", bannerTeam: senderTeam, senderId,
           });
           return;
         }
@@ -1945,8 +2671,15 @@
           }
 
           hitList.forEach((target, idx) => {
-            target.hp -= 12;
-            createDamageNumber(target.x, target.y, 12);
+            const DMG = 8;
+            target.hp -= DMG;
+            createDamageNumber(target.x, target.y, DMG);
+
+            if (senderId) {
+              const sender = players.find((p) => p.id === senderId && p.hp > 0);
+              if (sender) sender.heal(3);
+            }
+
             effects.push({
               type: "brainExplode",
               x: target.x, y: target.y,
@@ -1965,62 +2698,52 @@
                 life: 60, maxLife: 60,
               });
             }
+            if (target.hp <= 0) {
+              createKillEffect(target);
+              playKillSound(panForTeamRandom(target.team));
+              rewardSenderForGiftKill(senderId, 25);
+            }
           });
           return;
         }
 
+        /* ===== GHOST WITH EMERGE PHASE ===== */
         if (name.includes("ghost")) {
           playGhostAmbience(senderTeam, 0.35, 3);
           playGhostWail(senderTeam, 0.35, 0.1);
-          const HUNT_COUNT = Math.min(8, targets.length);
+
+          const HOP_COUNT = 8;
           const shuffled = [...targets].sort(() => Math.random() - 0.5);
-          const huntList = shuffled.slice(0, HUNT_COUNT);
-          let startX;
-          if (senderTeam === "A") startX = random(100, 300);
-          else startX = random(780, 980);
-          const startY = GAME_HEIGHT * 0.5;
+          const huntList = [];
+          for (let i = 0; i < HOP_COUNT; i++) {
+            huntList.push(shuffled[i % shuffled.length]);
+          }
+
+          const sender = players.find(p => p.id === senderId && p.hp > 0);
+          const origin = getSenderOrigin(senderId, senderTeam);
 
           effects.push({
             type: "huntingGhost",
-            x: startX, y: startY,
-            startX, startY,
+            x: origin.x, y: origin.y,
+            startX: origin.x, startY: origin.y,
             team: senderTeam,
             targetTeam: enemyTeam,
             huntList,
             currentIndex: 0,
-            phase: "flying",
-            life: 400, maxLife: 400,
+            phase: "emerging",
+            stageTimer: 0,
+            emergeDuration: 35,
+            emergeProgress: 0,
+            senderRef: sender,
+            life: 700, maxLife: 700,
             trail: [],
-          });
-
-          huntList.forEach((target, idx) => {
-            setTimeout(() => {
-              if (target.hp > 0) {
-                target.hp -= 20;
-                createDamageNumber(target.x, target.y, 20);
-                effects.push({
-                  type: "ghostTag",
-                  x: target.x, y: target.y,
-                  team: target.team,
-                  life: 60, maxLife: 60,
-                });
-                for (let k = 0; k < 3; k++) {
-                  const a = Math.random() * Math.PI * 2;
-                  effects.push({
-                    type: "emojiParticle",
-                    x: target.x, y: target.y,
-                    vx: Math.cos(a) * random(3, 6),
-                    vy: Math.sin(a) * random(3, 6) - 2,
-                    emoji: Math.random() < 0.5 ? "👻" : "💀",
-                    life: 60, maxLife: 60,
-                  });
-                }
-              }
-            }, 700 + idx * 260);
+            senderId,
+            hopCount: HOP_COUNT,
+            hitsDone: 0,
           });
 
           setTimeout(() => playGhostScream(senderTeam, 0.35),
-                     700 + HUNT_COUNT * 260);
+                     700 + HOP_COUNT * 260);
           return;
         }
 
@@ -2042,19 +2765,33 @@
             life: 220, maxLife: 220,
             sourceTeam: senderTeam,
             targetTeam: enemyTeam,
+            senderId,
           });
 
           chainList.forEach((target, idx) => {
             setTimeout(() => {
               if (target.hp > 0) {
-                target.hp -= 30;
-                createDamageNumber(target.x, target.y, 30);
+                const DMG = 18;
+                target.hp -= DMG;
+                createDamageNumber(target.x, target.y, DMG);
+
+                if (senderId) {
+                  const sender = players.find((p) => p.id === senderId && p.hp > 0);
+                  if (sender) sender.heal(6);
+                }
+
                 effects.push({
                   type: "chainHit",
                   x: target.x, y: target.y,
                   team: target.team,
                   life: 60, maxLife: 60,
                 });
+
+                if (target.hp <= 0) {
+                  createKillEffect(target);
+                  playKillSound(panForTeamRandom(target.team));
+                  rewardSenderForGiftKill(senderId, 25);
+                }
               }
             }, 220 + idx * 220);
             setTimeout(() => playLightningCrack(senderTeam, 0.3 + idx * 0.02),
@@ -2071,12 +2808,13 @@
         if (coins >= 1 && coins < 10) {
           playRoseSound(senderTeam);
           fireMissiles({
-            senderTeam, targets, count: 5, damage: 2, missileType: "rocket",
-            bannerText: "⚔ GIFT ATTACK!", bannerTeam: senderTeam, shake: 0,
+            senderTeam, targets, count: 5, damage: 3, missileType: "rocket",
+            bannerText: "⚔ GIFT ATTACK!", bannerTeam: senderTeam, senderId,
           });
           return;
         }
 
+        /* ===== MEGA STRIKE / DEATH SAW WITH EMERGE + FLY ===== */
         if (coins >= 100 && coins < 500) {
           playLaserCharge(senderTeam, 0.35, 0.6);
 
@@ -2087,29 +2825,37 @@
           const ZONE_CENTER_Y = GAME_HEIGHT / 2;
           const ZONE_RADIUS   = 220;
 
+          const sender = players.find(p => p.id === senderId && p.hp > 0);
+          const origin = getSenderOrigin(senderId, senderTeam);
+
           effects.push({
-            type: "deathSaw",
-            x: ZONE_CENTER_X,
-            y: ZONE_CENTER_Y,
+            type: "deathSawEmerge",
+            x: origin.x,
+            y: origin.y,
+            startX: origin.x,
+            startY: origin.y,
             centerX: ZONE_CENTER_X,
             centerY: ZONE_CENTER_Y,
             zoneRadius: ZONE_RADIUS,
             team: enemyTeam,
             sourceTeam: senderTeam,
+            senderId,
+            senderRef: sender,
             bladeAngle: 0,
             stageTimer: 0,
-            life: 180, maxLife: 180,
-            damagePerTick: 45,
+            phase: "emerging",
+            emergeDuration: 40,
+            flyDuration: 50,
+            currentSize: 0,
+            currentTeeth: 0,
+            life: 280, maxLife: 280,
+            damagePerTick: 15,
             tickEvery: 10,
             finished: false,
           });
 
           playSawSpin(senderTeam, 0.35, 3);
-
-          setTimeout(() => {
-            playThunderRumble(senderTeam, 0.4, 0);
-          }, 300);
-
+          setTimeout(() => playThunderRumble(senderTeam, 0.4, 0), 300);
           return;
         }
 
@@ -2125,40 +2871,28 @@
 
           meteorTargets.forEach((target, idx) => {
             setTimeout(() => {
+              if (target.hp <= 0) return;
+
+              const origin = getSenderOrigin(senderId, senderTeam);
+              const startY = origin.y - 200;
+
               effects.push({
                 type: "meteor",
-                startX: target.x + 400,
-                startY: -100,
+                startX: origin.x,
+                startY: startY,
                 targetX: target.x,
                 targetY: target.y,
                 team: target.team,
-                life: 60, maxLife: 60,
+                senderTeam,
+                life: 70, maxLife: 70,
+                targetRef: target,
+                senderId,
+                exploded: false,
+                damage: 15,
+                splashRadius: 180,
+                splashDamage: 8,
               });
 
-              setTimeout(() => {
-                if (target.hp > 0) {
-                  target.hp -= 120;
-                  createDamageNumber(target.x, target.y, 120);
-                  createExplosion(target.x, target.y, target.team);
-                  screenShake = Math.max(screenShake, 40);
-
-                  effects.push({
-                    type: "meteorImpact",
-                    x: target.x, y: target.y,
-                    team: target.team,
-                    life: 60, maxLife: 60,
-                  });
-                  playMeteorImpact(target.team, 0.5);
-
-                  if (target.hp <= 0) {
-                    createKillEffect(target);
-                    playKillSound(panForTeamRandom(target.team));
-                  }
-                }
-              }, 950);
-            }, idx * 350);
-
-            setTimeout(() => {
               playMeteorWhoosh(target.team, 0.3);
             }, idx * 350);
           });
@@ -2172,12 +2906,16 @@
               life: 80, maxLife: 80,
             });
             playThunderBoom(senderTeam, 0.5, 0);
-          }, METEOR_COUNT * 350 + 1000);
+          }, METEOR_COUNT * 350 + 1500);
 
           return;
         }
 
         if (coins >= 1000) {
+          players.forEach(p => {
+            if (p.team === senderTeam && p.hp > 0) p.heal(30);
+          });
+
           playApocalypseSiren(senderTeam, 0.35, 2.5);
           playTornadoSound(senderTeam, 0.35, 3.0);
           playWipeSound(senderTeam);
@@ -2272,6 +3010,9 @@
                     life: 90, maxLife: 90,
                   });
                 }
+                createKillEffect(target);
+                playKillSound(panForTeamRandom(target.team));
+                rewardSenderForGiftKill(senderId, 25);
               }, idx * 100);
             });
 
@@ -2383,11 +3124,34 @@
         }
       }
 
+      /* ============================================================
+         STATUS BAR
+      ============================================================ */
+      function setStatus(text, cls) {
+        const el = document.getElementById("status");
+        el.textContent = text;
+        el.classList.remove("connected", "disconnected", "connecting");
+        if (cls) el.classList.add(cls);
+      }
+
       function updateStatus() {
         const a = players.filter((p) => p.team === "A").length;
         const b = players.filter((p) => p.team === "B").length;
-        document.getElementById("status").textContent =
-          `TEAM A: ${a}  |  TEAM B: ${b}`;
+
+        let prefix = "🟡";
+        let cls = "connecting";
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          prefix = "🟢"; cls = "connected";
+        } else if (socket && (socket.readyState === WebSocket.CLOSED ||
+                              socket.readyState === WebSocket.CLOSING)) {
+          prefix = "🔴"; cls = "disconnected";
+        }
+
+        setStatus(
+          `${prefix} TEAM A: ${a}  |  TEAM B: ${b}` +
+          (cls === "connected" ? "" : "  (test mode)"),
+          cls
+        );
       }
 
       /* ============================================================
@@ -2418,24 +3182,27 @@
       }
 
       /* ============================================================
-         TIKFINITY WEBSOCKET  (improved, defensive)
+         TIKFINITY WEBSOCKET
       ============================================================ */
       let socket = null;
+      let reconnectTimer = null;
 
       function connectTikFinity() {
         try {
+          setStatus("🟡 Connecting to TikFinity...", "connecting");
+          logDebug("WS CONNECTING...");
+
           socket = new WebSocket("ws://localhost:21213/");
 
           socket.onopen = () => {
-            document.getElementById("status").textContent = "TikFinity connected";
+            setStatus("🟢 TikFinity CONNECTED", "connected");
             logDebug("WS CONNECTED");
           };
 
           socket.onmessage = (event) => {
             let data;
-            try {
-              data = JSON.parse(event.data);
-            } catch (e) {
+            try { data = JSON.parse(event.data); }
+            catch (e) {
               logDebug("Non-JSON: " + String(event.data).slice(0, 120));
               return;
             }
@@ -2445,31 +3212,30 @@
 
             const evt = (data.event || data.type || "").toLowerCase();
 
-            if (evt === "chat" || evt === "comment") {
-              handleChat(data);
-            } else if (evt === "gift") {
-              handleGift(data);
-            }
+            if (evt === "chat" || evt === "comment") handleChat(data);
+            else if (evt === "gift") handleGift(data);
           };
 
           socket.onerror = () => {
-            document.getElementById("status").textContent =
-              "TikFinity not connected - test mode";
+            setStatus("🔴 TikFinity NOT CONNECTED (test mode)", "disconnected");
             logDebug("WS ERROR");
           };
 
           socket.onclose = () => {
-            document.getElementById("status").textContent =
-              "TikFinity disconnected - test mode";
-            logDebug("WS CLOSED");
+            setStatus("🔴 TikFinity DISCONNECTED (test mode)", "disconnected");
+            logDebug("WS CLOSED - retrying in 3s");
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => connectTikFinity(), 3000);
           };
         } catch (error) {
           console.log("WebSocket unavailable", error);
+          setStatus("🔴 TikFinity NOT CONNECTED (test mode)", "disconnected");
           logDebug("WS THROW: " + error.message);
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(() => connectTikFinity(), 3000);
         }
       }
 
-      // Helper: pull a value from possibly-nested objects
       function pick(obj, ...keys) {
         if (!obj) return undefined;
         for (const k of keys) {
@@ -2481,19 +3247,15 @@
       }
 
       function handleChat(data) {
-        // data.data might itself be wrapped. Try common shapes.
         const info = data.data || data;
-
         const username = pick(
           info,
           "uniqueId", "userId", "unique_id", "user_id",
           "nickname", "nickName", "nick_name", "displayName"
         ) || "viewer";
-
         const comment = String(
           pick(info, "comment", "text", "message", "content") || ""
         ).trim().toLowerCase();
-
         const avatar = pick(
           info,
           "profilePictureUrl", "profilePicture", "avatarUrl",
@@ -2502,28 +3264,21 @@
 
         logDebug(`CHAT user=${username} comment="${comment}"`);
 
-        if (comment === "a" || comment === "a " || comment === "team a") {
-          addPlayer(username, avatar, "A");
-        } else if (comment === "b" || comment === "b " || comment === "team b") {
-          addPlayer(username, avatar, "B");
-        }
+        if (comment === "a" || comment === "team a") addPlayer(username, avatar, "A");
+        else if (comment === "b" || comment === "team b") addPlayer(username, avatar, "B");
       }
 
       function handleGift(data) {
         const info = data.data || data;
-
         const username = pick(
           info,
           "uniqueId", "userId", "unique_id", "user_id", "nickname", "nickName"
         ) || "viewer";
-
         const giftName = String(pick(
           info, "giftName", "gift_name", "giftId", "gift_id"
         ) || "");
-
         const coinsRaw = pick(
-          info,
-          "diamondCount", "diamonds", "coins",
+          info, "diamondCount", "diamonds", "coins",
           "diamond_count", "giftDiamondCount"
         );
         const coins = parseInt(coinsRaw) || 1;
@@ -2535,7 +3290,7 @@
           logDebug(`Gift ignored - user ${username} not on a team`);
           return;
         }
-        giftAttack(coins, player.team, giftName);
+        giftAttack(coins, player.team, giftName, player.id);
       }
 
       /* ============================================================
@@ -2555,14 +3310,16 @@
       document.getElementById("giftButton").onclick = () => {
         testGiftToggle++;
         const mod = testGiftToggle % 8;
-        if (mod === 1) giftAttack(1, "A", "Rose");
-        else if (mod === 2) giftAttack(5, "A", "Heart Me");
-        else if (mod === 3) giftAttack(10, "A", "Mind Blown");
-        else if (mod === 4) giftAttack(20, "A", "Ghost");
-        else if (mod === 5) giftAttack(50, "A", "Lightning");
-        else if (mod === 6) giftAttack(100, "A", "Mega Strike");
-        else if (mod === 7) giftAttack(500, "A", "Nuke");
-        else giftAttack(1000, "A", "Total Wipe");
+        const sender = players.find(p => p.team === "A");
+        const sid = sender ? sender.id : null;
+        if (mod === 1) giftAttack(1, "A", "Rose", sid);
+        else if (mod === 2) giftAttack(5, "A", "Heart Me", sid);
+        else if (mod === 3) giftAttack(10, "A", "Mind Blown", sid);
+        else if (mod === 4) giftAttack(20, "A", "Ghost", sid);
+        else if (mod === 5) giftAttack(50, "A", "Lightning", sid);
+        else if (mod === 6) giftAttack(100, "A", "Mega Strike", sid);
+        else if (mod === 7) giftAttack(500, "A", "Nuke", sid);
+        else giftAttack(1000, "A", "Total Wipe", sid);
       };
       document.getElementById("muteButton").onclick = () => {
         soundEnabled = !soundEnabled;
