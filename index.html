@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TikTok Comment Battle</title>
+    <title>TikTok Battle — Messi vs Ronaldo</title>
 
     <style>
       * { box-sizing: border-box; }
@@ -35,13 +35,41 @@
       #status.connected { background: rgba(20,120,40,0.85); color: #b6ffb6; }
       #status.disconnected { background: rgba(140,20,20,0.85); color: #ffc0c0; }
       #status.connecting { background: rgba(140,110,20,0.85); color: #ffe9a0; }
+      #joinPopups {
+        position: absolute; top: 48px; left: 50%;
+        transform: translateX(-50%);
+        z-index: 22;
+        display: flex; flex-direction: column;
+        align-items: center; gap: 6px;
+        pointer-events: none;
+      }
+      .joinPopup {
+        background: rgba(0,0,0,0.8);
+        color: #fff;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 14px;
+        border: 2px solid #fff;
+        opacity: 0;
+        transform: translateY(-12px);
+        animation: joinPop 1.8s ease-out forwards;
+      }
+      .joinPopup.teamA { border-color: #2b7bd6; color: #9fd4ff; }
+      .joinPopup.teamB { border-color: #0f8a3c; color: #7dffa3; }
+      @keyframes joinPop {
+        0%   { opacity: 0; transform: translateY(-12px) scale(0.9); }
+        15%  { opacity: 1; transform: translateY(0) scale(1); }
+        80%  { opacity: 1; transform: translateY(0) scale(1); }
+        100% { opacity: 0; transform: translateY(-8px) scale(0.95); }
+      }
       #debug {
         position: absolute; top: 50px; left: 10px; right: 10px;
         z-index: 25; padding: 8px 12px;
         background: rgba(0,0,0,0.75); color: #9f9;
         border-radius: 8px; font-size: 11px;
         font-family: monospace; text-align: left;
-        max-height: 180px; overflow-y: auto;
+        max-height: 220px; overflow-y: auto;
         display: none; white-space: pre-wrap; word-break: break-all;
       }
       #debug.visible { display: block; }
@@ -56,8 +84,8 @@
         border: none; border-radius: 8px;
         padding: 8px 12px; font-weight: bold; cursor: pointer;
       }
-      #teamAButton { background: #e63946; color: white; }
-      #teamBButton { background: #00b4d8; color: white; }
+      #teamAButton { background: #2b7bd6; color: white; }
+      #teamBButton { background: #0f8a3c; color: white; }
       #giftButton  { background: #ffd166; color: black; }
       #resetButton { background: white; color: black; }
       #muteButton  { background: #333; color: white; }
@@ -69,10 +97,11 @@
     <div id="game-wrapper">
       <canvas id="battleCanvas"></canvas>
       <div id="status">Connecting to TikFinity...</div>
+      <div id="joinPopups"></div>
       <div id="debug"></div>
       <div id="controls">
-        <button id="teamAButton">Test A</button>
-        <button id="teamBButton">Test B</button>
+        <button id="teamAButton">Test Messi</button>
+        <button id="teamBButton">Test Ronaldo</button>
         <button id="giftButton">Test Gift</button>
         <button id="muteButton">🔊</button>
         <button id="debugButton">🐞</button>
@@ -94,6 +123,21 @@
 
       const START_HP = 250;
       const MAX_HP_CAP = 5000;
+      const LIKE_HEAL_AMOUNT = 1;
+
+      const TIKTOK_GIFT_IDS = {
+        5655: "Rose",
+        5658: "TikTok",
+        5567: "Heart Me",
+        5487: "Heart",
+        5269: "Finger Heart",
+        5509: "Hand Hearts",
+        6104: "Mind Blown",
+        6161: "Ghost",
+        6053: "Lightning",
+        6064: "Ice Cream Cone",
+        5461: "Doughnut",
+      };
 
       function fitCanvas() {
         const wrapper = document.getElementById("game-wrapper");
@@ -119,23 +163,21 @@
       function logDebug(msg) {
         const time = new Date().toLocaleTimeString();
         debugLines.push(`[${time}] ${msg}`);
-        if (debugLines.length > 30) debugLines.shift();
+        if (debugLines.length > 40) debugLines.shift();
         debugEl.textContent = debugLines.join("\n");
         debugEl.scrollTop = debugEl.scrollHeight;
+        console.log("[BATTLE]", msg);
       }
       document.getElementById("debugButton").onclick = () => {
         debugEl.classList.toggle("visible");
       };
 
       /* ============================================================
-         BACKGROUND IMAGES
+         BACKGROUND IMAGE
       ============================================================ */
-      const IMG_BG_A = new Image();
-      IMG_BG_A.src = "./messi1.jpg";
-      const IMG_BG_B = new Image();
-      IMG_BG_B.src = "./ronaldo2.jpg";
-      const FALLBACK_BG_A = "#f4f4f4";
-      const FALLBACK_BG_B = "#0d1b2a";
+      const IMG_BG = new Image();
+      IMG_BG.src = "./ab.jpg";
+      const FALLBACK_BG = "#111";
 
       /* ============================================================
          SOUND ENGINE
@@ -338,11 +380,6 @@
         const panner = makePanner(pan);
         if (panner) gain.connect(panner); else gain.connect(audioCtx.destination);
         osc.start(now); osc.stop(now + duration + 0.05);
-        for (let i = 0; i < 10; i++) {
-          playTone({ freq: 400 + i * 100, type: "square", duration: 0.08,
-                     volume: 0.05 * (i / 10),
-                     delay: (i * duration) / 10, pan });
-        }
       }
       function playLaserFire(team="A", volume=0.5) {
         const pan = panForTeam(team);
@@ -402,6 +439,28 @@
                      delay: i * 0.15, pan });
         }
       }
+      function playRocketLaunch(team = "A") {
+        const pan = panForTeamRandom(team);
+        playTone({ freq: 900, type: "sawtooth", duration: 0.18,
+                   volume: 0.16, sweepTo: 200, pan });
+        playTone({ freq: 180, type: "sine", duration: 0.1,
+                   volume: 0.2, sweepTo: 60, delay: 0.04, pan });
+      }
+      function playGrenadeLaunch(team = "A") {
+        const pan = panForTeamRandom(team);
+        playTone({ freq: 1400, type: "square", duration: 0.06,
+                   volume: 0.18, sweepTo: 500, pan });
+        playTone({ freq: 400, type: "sawtooth", duration: 0.3,
+                   volume: 0.14, sweepTo: 180, delay: 0.05, pan });
+      }
+      function playGrenadeExplosion(team = "A") {
+        const pan = panForTeamRandom(team);
+        playNoise({ duration: 0.2, volume: 0.55, filterFreq: 5000, pan });
+        playTone({ freq: 140, type: "sine", duration: 0.9,
+                   volume: 0.5, sweepTo: 30, pan });
+        playNoise({ duration: 1.0, volume: 0.3, filterFreq: 400,
+                    delay: 0.08, pan });
+      }
 
       function playTornadoSound(team="A", volume=0.4, duration=3.0) {
         if (!soundEnabled || !audioCtx) return;
@@ -433,25 +492,6 @@
         filter.connect(gain);
         gain.connect(panner);
         src.start(now); src.stop(now + duration);
-
-        const osc = audioCtx.createOscillator();
-        const oscGain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.exponentialRampToValueAtTime(1200, now + duration);
-        const lfo = audioCtx.createOscillator();
-        const lfoGain = audioCtx.createGain();
-        lfo.frequency.setValueAtTime(4, now);
-        lfo.frequency.linearRampToValueAtTime(12, now + duration);
-        lfoGain.gain.setValueAtTime(50, now);
-        lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
-        lfo.start(now); lfo.stop(now + duration);
-        oscGain.gain.setValueAtTime(0, now);
-        oscGain.gain.linearRampToValueAtTime(volume * 0.3, now + duration * 0.5);
-        oscGain.gain.linearRampToValueAtTime(0, now + duration);
-        osc.connect(oscGain);
-        oscGain.connect(panner);
-        osc.start(now); osc.stop(now + duration);
       }
       function playWipeBlast(team="A", volume=0.6) {
         if (!soundEnabled || !audioCtx) return;
@@ -459,26 +499,6 @@
         const panner = makePanner(pan);
         if (!panner) return;
         const now = audioCtx.currentTime;
-        const crackBuffer = audioCtx.createBuffer(
-          1, Math.floor(audioCtx.sampleRate * 0.15), audioCtx.sampleRate);
-        const crackData = crackBuffer.getChannelData(0);
-        for (let i = 0; i < crackData.length; i++) {
-          crackData[i] = (Math.random() * 2 - 1) *
-                         Math.pow(1 - i / crackData.length, 2);
-        }
-        const crackSrc = audioCtx.createBufferSource();
-        crackSrc.buffer = crackBuffer;
-        const crackFilter = audioCtx.createBiquadFilter();
-        crackFilter.type = "highpass";
-        crackFilter.frequency.setValueAtTime(3000, now);
-        const crackGain = audioCtx.createGain();
-        crackGain.gain.setValueAtTime(volume * 0.9, now);
-        crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-        crackSrc.connect(crackFilter);
-        crackFilter.connect(crackGain);
-        crackGain.connect(panner);
-        crackSrc.start(now); crackSrc.stop(now + 0.2);
-
         const boomOsc = audioCtx.createOscillator();
         const boomGain = audioCtx.createGain();
         boomOsc.type = "sine";
@@ -490,91 +510,6 @@
         boomOsc.connect(boomGain);
         boomGain.connect(panner);
         boomOsc.start(now); boomOsc.stop(now + 2.5);
-
-        const rumbleBuffer = audioCtx.createBuffer(
-          1, Math.floor(audioCtx.sampleRate * 2.5), audioCtx.sampleRate);
-        const rumbleData = rumbleBuffer.getChannelData(0);
-        for (let i = 0; i < rumbleData.length; i++) {
-          const t = i / rumbleData.length;
-          rumbleData[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 1.5);
-        }
-        const rumbleSrc = audioCtx.createBufferSource();
-        rumbleSrc.buffer = rumbleBuffer;
-        const rumbleFilter = audioCtx.createBiquadFilter();
-        rumbleFilter.type = "lowpass";
-        rumbleFilter.frequency.setValueAtTime(500, now);
-        rumbleFilter.frequency.exponentialRampToValueAtTime(80, now + 2.5);
-        const rumbleGain = audioCtx.createGain();
-        rumbleGain.gain.setValueAtTime(volume * 0.7, now);
-        rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
-        rumbleSrc.connect(rumbleFilter);
-        rumbleFilter.connect(rumbleGain);
-        rumbleGain.connect(panner);
-        rumbleSrc.start(now); rumbleSrc.stop(now + 2.5);
-      }
-      function playGlassCrack(team="A", volume=0.5) {
-        if (!soundEnabled || !audioCtx) return;
-        const pan = panForTeam(team);
-        const panner = makePanner(pan);
-        if (!panner) return;
-        const now = audioCtx.currentTime;
-        const crackBuffer = audioCtx.createBuffer(
-          1, Math.floor(audioCtx.sampleRate * 0.2), audioCtx.sampleRate);
-        const crackData = crackBuffer.getChannelData(0);
-        for (let i = 0; i < crackData.length; i++) {
-          const t = i / crackData.length;
-          crackData[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3);
-        }
-        const crackSrc = audioCtx.createBufferSource();
-        crackSrc.buffer = crackBuffer;
-        const crackFilter = audioCtx.createBiquadFilter();
-        crackFilter.type = "highpass";
-        crackFilter.frequency.setValueAtTime(2000, now);
-        const crackGain = audioCtx.createGain();
-        crackGain.gain.setValueAtTime(volume, now);
-        crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-        crackSrc.connect(crackFilter);
-        crackFilter.connect(crackGain);
-        crackGain.connect(panner);
-        crackSrc.start(now); crackSrc.stop(now + 0.25);
-
-        for (let i = 0; i < 8; i++) {
-          const freq = 1800 + Math.random() * 2400;
-          playTone({ freq, type: "sine", duration: 0.08,
-                     volume: volume * 0.3,
-                     delay: 0.05 + i * 0.07 + Math.random() * 0.05,
-                     sweepTo: freq * 0.6, pan });
-        }
-      }
-      function playWipeCrack(team="A", volume=0.5, delay=0) {
-        if (!soundEnabled || !audioCtx) return;
-        const pan = panForTeam(team);
-        const panner = makePanner(pan);
-        if (!panner) return;
-        const now = audioCtx.currentTime + delay;
-        const bufferSize = Math.floor(audioCtx.sampleRate * 0.5);
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          const t = i / bufferSize;
-          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) *
-                    (Math.random() < 0.3 ? 1 : 0.5);
-        }
-        const src = audioCtx.createBufferSource();
-        src.buffer = buffer;
-        const filter = audioCtx.createBiquadFilter();
-        filter.type = "lowpass";
-        filter.frequency.setValueAtTime(1200, now);
-        filter.frequency.exponentialRampToValueAtTime(200, now + 0.5);
-        const gain = audioCtx.createGain();
-        gain.gain.setValueAtTime(volume, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-        src.connect(filter);
-        filter.connect(gain);
-        gain.connect(panner);
-        src.start(now); src.stop(now + 0.6);
-        playTone({ freq: 80, type: "sine", duration: 0.4,
-                   volume: volume * 0.6, delay, sweepTo: 30, pan });
       }
       function playApocalypseSiren(team="A", volume=0.35, duration=2.5) {
         if (!soundEnabled || !audioCtx) return;
@@ -610,28 +545,6 @@
         filter.connect(baseGain);
         baseGain.connect(panner);
         baseOsc.start(now); baseOsc.stop(now + duration);
-
-        const harmOsc = audioCtx.createOscillator();
-        const harmGain = audioCtx.createGain();
-        harmOsc.type = "sine";
-        harmOsc.frequency.setValueAtTime(800, now);
-        harmOsc.frequency.linearRampToValueAtTime(1800, now + duration);
-        const lfo2 = audioCtx.createOscillator();
-        const lfo2Gain = audioCtx.createGain();
-        lfo2.type = "sine";
-        lfo2.frequency.setValueAtTime(0.5, now);
-        lfo2.frequency.linearRampToValueAtTime(2.5, now + duration);
-        lfo2Gain.gain.setValueAtTime(300, now);
-        lfo2Gain.gain.linearRampToValueAtTime(500, now + duration);
-        lfo2.connect(lfo2Gain);
-        lfo2Gain.connect(harmOsc.frequency);
-        lfo2.start(now); lfo2.stop(now + duration);
-        harmGain.gain.setValueAtTime(0, now);
-        harmGain.gain.linearRampToValueAtTime(volume * 0.25, now + duration * 0.5);
-        harmGain.gain.linearRampToValueAtTime(volume * 0.4, now + duration);
-        harmOsc.connect(harmGain);
-        harmGain.connect(panner);
-        harmOsc.start(now); harmOsc.stop(now + duration);
       }
 
       /* ============================================================
@@ -640,12 +553,8 @@
       let players = [];
       let bullets = [];
       let effects = [];
+      let grenades = [];
       let screenShake = 0;
-      let playerCounter = 0;
-      let bannerText = "";
-      let bannerLife = 0;
-      let bannerMaxLife = 90;
-      let bannerTeam = "A";
 
       const DEFAULT_AVATAR =
         "data:image/svg+xml;charset=UTF-8," +
@@ -659,6 +568,54 @@
       function random(min, max) { return Math.random() * (max - min) + min; }
       function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
+      function deepPick(obj, ...keys) {
+        if (!obj) return undefined;
+        for (const k of keys) {
+          if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+        }
+        const containers = ["user", "fromUser", "sender", "userData", "data", "gift"];
+        for (const c of containers) {
+          if (obj[c] && typeof obj[c] === "object") {
+            for (const k of keys) {
+              if (obj[c][k] !== undefined && obj[c][k] !== null && obj[c][k] !== "") {
+                return obj[c][k];
+              }
+            }
+          }
+        }
+        if (obj.gift && typeof obj.gift === "object") {
+          if (obj.gift.name) return obj.gift.name;
+          if (obj.gift.giftName) return obj.gift.giftName;
+          if (obj.gift.id) return obj.gift.id;
+        }
+        if (obj.profilePicture && obj.profilePicture.url) return obj.profilePicture.url;
+        if (obj.user && obj.user.profilePicture && obj.user.profilePicture.url) {
+          return obj.user.profilePicture.url;
+        }
+        return undefined;
+      }
+
+      /* ============================================================
+         JOIN POPUP
+      ============================================================ */
+      function showJoinPopup(username, team) {
+        const container = document.getElementById("joinPopups");
+        if (!container) return;
+
+        const el = document.createElement("div");
+        el.className = "joinPopup " + (team === "A" ? "teamA" : "teamB");
+
+        const teamLabel = team === "A" ? "MESSI" : "RONALDO";
+        el.textContent = `${username} joined ${teamLabel}!`;
+
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 1800);
+
+        while (container.children.length > 4) {
+          container.removeChild(container.firstChild);
+        }
+      }
+
       /* ============================================================
          PLAYER
       ============================================================ */
@@ -668,12 +625,12 @@
           this.username = username || "viewer";
           this.team = team;
           this.kills = 0;
-          this.radius = 45;
+          this.radius = 40;
           this.hp = START_HP;
           this.maxHp = START_HP;
           this.damage = 1;
           this.bulletSize = 5;
-          this.speed = random(0.2, 0.6);
+          this.speed = random(1.6, 2.6);
           this.lastShot = 0;
           this.shootDelay = 1000;
           this.angle = random(0, Math.PI * 2);
@@ -681,19 +638,22 @@
           else this.x = random(630, 1000);
           this.y = random(300, 1650);
           this.img = new Image();
-          this.img.crossOrigin = "anonymous";
           this.img.src = avatar || DEFAULT_AVATAR;
           this.img.onerror = () => { this.img.src = DEFAULT_AVATAR; };
+
+          this.megaScale = 1;
+          this.megaTimer = 0;
         }
 
         grow() {
           this.kills++;
-          this.radius = Math.min(70, 55 + this.kills * 2);
+          this.radius = Math.min(62, 50 + this.kills * 1.8);
           this.maxHp = Math.min(MAX_HP_CAP, Math.max(this.maxHp, START_HP + this.kills * 15));
           this.hp = Math.min(this.maxHp, this.hp + 30);
           this.hp = Math.min(this.maxHp, this.hp + 25);
           this.damage = 1;
           this.bulletSize = Math.min(10, 5 + this.kills * 0.25);
+          this.speed = Math.min(4.0, this.speed + 0.06);
         }
 
         heal(amount) {
@@ -733,21 +693,77 @@
 
         move() {
           this.angle += random(-0.015, 0.015);
-          this.x += Math.cos(this.angle) * this.speed;
-          this.y += Math.sin(this.angle) * this.speed;
-          if (this.team === "A") this.x = Math.max(60, Math.min(500, this.x));
-          else this.x = Math.max(580, Math.min(1020, this.x));
-          this.y = Math.max(180, Math.min(1750, this.y));
+
+          let nx = this.x + Math.cos(this.angle) * this.speed;
+          let ny = this.y + Math.sin(this.angle) * this.speed;
+
+          const minX = this.team === "A" ? 60 : 580;
+          const maxX = this.team === "A" ? 500 : 1020;
+          const minY = 180;
+          const maxY = 1750;
+
+          if (nx < minX || nx > maxX) {
+            this.angle = Math.PI - this.angle;
+            nx = Math.max(minX, Math.min(maxX, nx));
+          }
+          if (ny < minY || ny > maxY) {
+            this.angle = -this.angle;
+            ny = Math.max(minY, Math.min(maxY, ny));
+          }
+
+          this.angle += random(-0.05, 0.05);
+          if (this.angle > Math.PI) this.angle -= Math.PI * 2;
+          if (this.angle < -Math.PI) this.angle += Math.PI * 2;
+
+          this.x = nx;
+          this.y = ny;
         }
 
         update(now) { this.move(); this.shoot(now); }
 
         draw() {
           ctx.save();
-          const barWidth = this.radius * 2;
-          const barHeight = 18;
-          const barX = this.x - this.radius;
-          const barY = this.y - this.radius - 35;
+
+          const scale = this.megaScale || 1;
+
+          if (scale > 1.05) {
+            const pulse = 1 + Math.sin(Date.now() * 0.006) * 0.08;
+            const glowR = this.radius * scale * 1.6 * pulse;
+
+            const grad = ctx.createRadialGradient(
+              this.x, this.y, 0, this.x, this.y, glowR);
+            grad.addColorStop(0, "rgba(255,255,255,0.35)");
+            grad.addColorStop(0.4, this.team === "A"
+              ? "rgba(120,200,255,0.25)"
+              : "rgba(120,255,150,0.25)");
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, glowR, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(Date.now() * 0.002);
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius * scale * 1.2, 0, Math.PI * 2);
+            ctx.strokeStyle = this.team === "A"
+              ? "rgba(150,220,255,0.9)"
+              : "rgba(150,255,180,0.9)";
+            ctx.lineWidth = 6;
+            ctx.shadowColor = this.team === "A" ? "#5cc9ff" : "#3aff6c";
+            ctx.shadowBlur = 40;
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          const drawRadius = this.radius * scale;
+
+          const barScale = scale > 1.05 ? scale : 1;
+          const barWidth = this.radius * 2 * barScale;
+          const barHeight = 18 * barScale;
+          const barX = this.x - barWidth / 2;
+          const barY = this.y - this.radius * barScale - 35 * barScale;
           ctx.fillStyle = "#333";
           ctx.fillRect(barX, barY, barWidth, barHeight);
           ctx.fillStyle = "#39ff14";
@@ -755,25 +771,51 @@
           ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
 
           ctx.textAlign = "center";
-          ctx.font = "bold " + Math.max(22, Math.min(40, this.radius * 0.6)) + "px Arial";
+          const baseFont = Math.max(22, Math.min(40, this.radius * 0.6));
+          const nameFont = scale > 1.05
+            ? Math.floor(baseFont * scale * 0.7)
+            : baseFont;
+          ctx.font = "bold " + nameFont + "px Arial";
           ctx.fillStyle = this.team === "A" ? "#111" : "#fff";
+
           let displayName = this.username;
-          if (displayName.length > 12) displayName = displayName.substring(0, 12) + "...";
-          ctx.fillText(displayName + "  💀" + this.kills,
-                       this.x, this.y - this.radius - 52);
+          if (scale <= 1.05 && displayName.length > 12) {
+            displayName = displayName.substring(0, 12) + "...";
+          }
+          const nameY = this.y - this.radius * scale - 40;
+          const nameText = displayName + "  💀" + this.kills;
+
+          if (scale > 1.05) {
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 5;
+            ctx.strokeText(nameText, this.x, nameY);
+          }
+          ctx.fillText(nameText, this.x, nameY);
 
           ctx.save();
           ctx.beginPath();
-          ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          ctx.arc(this.x, this.y, drawRadius, 0, Math.PI * 2);
           ctx.clip();
           if (this.img.complete) {
             try {
               ctx.drawImage(this.img,
-                this.x - this.radius, this.y - this.radius,
-                this.radius * 2, this.radius * 2);
-            } catch (e) { drawDefaultAvatar(this.x, this.y, this.radius); }
-          } else drawDefaultAvatar(this.x, this.y, this.radius);
+                this.x - drawRadius, this.y - drawRadius,
+                drawRadius * 2, drawRadius * 2);
+            } catch (e) { drawDefaultAvatar(this.x, this.y, drawRadius); }
+          } else drawDefaultAvatar(this.x, this.y, drawRadius);
           ctx.restore();
+
+          if (scale > 1.05) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, drawRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = this.team === "A" ? "#7cc9ff" : "#6effa0";
+            ctx.lineWidth = 8;
+            ctx.shadowColor = this.team === "A" ? "#5cc9ff" : "#3aff6c";
+            ctx.shadowBlur = 40;
+            ctx.stroke();
+            ctx.restore();
+          }
 
           ctx.restore();
         }
@@ -794,13 +836,14 @@
         if (existing) {
           existing.hp = Math.min(existing.maxHp, existing.hp + 20);
           logDebug(`Already joined: ${username} (${existing.team})`);
-          return;
+          return existing;
         }
         const player = new Player(username, username, avatar, team);
         players.push(player);
         createJoinEffect(player);
         updateStatus();
         logDebug(`+ ${username} joined TEAM ${team}`);
+        return player;
       }
 
       function createJoinEffect(player) {
@@ -808,9 +851,6 @@
                        team: player.team, life: 60, maxLife: 60 });
       }
 
-      /* ============================================================
-         SENDER ORIGIN HELPERS
-      ============================================================ */
       function getSenderOrigin(senderId, senderTeam) {
         const sender = players.find(p => p.id === senderId && p.hp > 0);
         if (sender) return { x: sender.x, y: sender.y, player: sender };
@@ -844,69 +884,61 @@
       }
 
       /* ============================================================
-         ROSE VOLLEY  (5 roses at ONE target)
-         Used by the 1-4 coin gift
+         ROSE VOLLEY — LOCKED ON ONE ENEMY, CURVED ARCS
+         Arc fades near the target so roses always land.
       ============================================================ */
       function fireRoseVolley(senderTeam, senderId, lockedTarget) {
         if (!lockedTarget || lockedTarget.hp <= 0) return;
 
-        const enemyCenterX = senderTeam === "A"
-          ? GAME_WIDTH * 0.75
-          : GAME_WIDTH * 0.25;
-        const enemyCenterY = GAME_HEIGHT / 2;
-
+        const targetId = lockedTarget.id;
         const ROSE_BULLETS = 5;
-        const STREAM_DELAY = 180;
+        const STREAM_DELAY = 280;
 
         for (let i = 0; i < ROSE_BULLETS; i++) {
           setTimeout(() => {
-            // If the original target died, retarget to another enemy
-            let target = lockedTarget;
-            if (!target || target.hp <= 0) {
-              const enemyTeam = senderTeam === "A" ? "B" : "A";
-              const alive = players.filter(p => p.team === enemyTeam && p.hp > 0);
-              if (alive.length === 0) return;
-              target = alive[Math.floor(Math.random() * alive.length)];
-            }
+            const target = players.find(p => p.id === targetId && p.hp > 0);
+            if (!target) return;
 
             const origin = getSenderOrigin(senderId, senderTeam);
-            const startX = origin.x;
-            const startY = origin.y;
+
+            const spread = (i - 2) * 30;
+            const startX = origin.x + (senderTeam === "A" ? -30 : 30);
+            const startY = origin.y + spread;
 
             const angleToTarget = Math.atan2(
               target.y - startY,
               target.x - startX
             );
 
-            const distToCenter = Math.hypot(
-              enemyCenterX - startX,
-              enemyCenterY - startY
-            );
-            const straightFrames = Math.max(18, Math.floor(distToCenter / 26) - 10);
+            const arcDirection = (i % 2 === 0) ? 1 : -1;
+
+            effects.push({
+              type: "roseLaunch",
+              x: startX, y: startY,
+              team: senderTeam,
+              life: 18, maxLife: 18,
+            });
 
             bullets.push({
-              x: startX + random(-15, 15),
-              y: startY + random(-15, 15),
+              x: startX,
+              y: startY,
               team: senderTeam,
               ownerId: "__gift__",
               senderId,
               targetId: target.id,
               angle: angleToTarget,
-              speed: 26,
+              speed: 34,
               damage: 3,
-              size: 15,
+              size: 18,
               missileType: "rose",
-              spin: Math.random() * Math.PI * 2,
-              spiral: true,
-              spiralCenterX: enemyCenterX,
-              spiralCenterY: enemyCenterY,
-              spiralRadius: 200 + Math.random() * 120,
-              spiralAngle: angleToTarget + (Math.random() < 0.5 ? 0.6 : -0.6),
-              spiralSpeed: 0.05 + Math.random() * 0.03,
-              spiralDirection: Math.random() < 0.5 ? 1 : -1,
-              spiralFrames: 0,
-              spiralStartAt: straightFrames,
-              spiralDiveAt: straightFrames + 40 + Math.floor(Math.random() * 20),
+              homing: true,
+              homingStrength: 0.25,
+              trailTimer: 0,
+              arcPhase: 0,
+              arcAmount: 260 + Math.random() * 80,
+              arcDirection,
+              arcDuration: 55,
+              life: 200,
             });
 
             effects.push({
@@ -920,71 +952,339 @@
       }
 
       /* ============================================================
-         HEART VOLLEY  (5 hearts, each to a DIFFERENT enemy)
-         Repeats allowed if fewer than 5 enemies
+         HEART VOLLEY
       ============================================================ */
       function fireHeartVolley(senderTeam, senderId, enemyTargets) {
-        if (!enemyTargets || enemyTargets.length === 0) return;
+        const enemyTeam = senderTeam === "A" ? "B" : "A";
+        const origin = getSenderOrigin(senderId, senderTeam);
 
-        const HEART_COUNT = 5;
-        const STREAM_DELAY = 120;
+        const enemyLeft  = enemyTeam === "A" ? 0 : GAME_WIDTH / 2;
+        const enemyRight = enemyTeam === "A" ? GAME_WIDTH / 2 : GAME_WIDTH;
+        const centerX = (enemyLeft + enemyRight) / 2;
+        const centerY = GAME_HEIGHT / 2;
 
-        // Build a list of 5 targets using round-robin so we spread damage
-        // across different enemies when possible.
-        const targetList = [];
-        for (let i = 0; i < HEART_COUNT; i++) {
-          targetList.push(enemyTargets[i % enemyTargets.length]);
+        const shuffled = [...(enemyTargets || [])].sort(() => Math.random() - 0.5);
+        const hitList = [];
+        for (let i = 0; i < 5; i++) {
+          hitList.push(shuffled.length ? shuffled[i % shuffled.length] : null);
         }
 
-        for (let i = 0; i < HEART_COUNT; i++) {
+        effects.push({
+          type: "bigHeart",
+          startX: origin.x,
+          startY: origin.y,
+          targetX: centerX,
+          targetY: centerY,
+          x: origin.x,
+          y: origin.y,
+          team: senderTeam,
+          senderId,
+          hitList,
+          life: 110, maxLife: 110,
+          stageTimer: 0,
+          flyDuration: 40,
+          startSize: 30,
+          endSize: 120,
+          size: 30,
+          exploded: false,
+        });
+      }
+
+      /* ============================================================
+         GRENADE VOLLEY
+      ============================================================ */
+      function fireGrenadeVolley(senderTeam, senderId, enemyTargets) {
+        if (!enemyTargets || enemyTargets.length === 0) return;
+
+        const GRENADE_COUNT = 3;
+        const STREAM_DELAY = 350;
+
+        const shuffled = [...enemyTargets].sort(() => Math.random() - 0.5);
+
+        for (let i = 0; i < GRENADE_COUNT; i++) {
           setTimeout(() => {
             const origin = getSenderOrigin(senderId, senderTeam);
-            const startX = origin.x;
-            const startY = origin.y;
 
-            // Assign a target. If the assigned one is dead, fall back to
-            // nearest living enemy; if none, just fly to that spot.
-            let target = targetList[i];
+            let target = shuffled[i % shuffled.length];
             const enemyTeam = senderTeam === "A" ? "B" : "A";
             if (!target || target.hp <= 0) {
               const alive = players.filter(p => p.team === enemyTeam && p.hp > 0);
-              if (alive.length > 0) {
-                target = alive[Math.floor(Math.random() * alive.length)];
-              } else {
-                // No living enemies — fire anyway toward a random spot
-                target = {
-                  id: "__none__",
-                  x: startX + (senderTeam === "A" ? 400 : -400),
-                  y: startY + random(-100, 100),
-                  hp: 1,
-                  team: enemyTeam,
-                };
-              }
+              if (alive.length === 0) return;
+              target = alive[Math.floor(Math.random() * alive.length)];
             }
 
-            const angleToTarget = Math.atan2(
-              target.y - startY,
-              target.x - startX
-            );
+            const startX = origin.x;
+            const startY = origin.y;
+            const endX = target.x + random(-40, 40);
+            const endY = target.y + random(-40, 40);
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const dist = Math.hypot(dx, dy);
+            const flightFrames = Math.max(40, Math.floor(dist / 12));
 
+            grenades.push({
+              startX, startY, endX, endY,
+              frame: 0,
+              flightFrames,
+              arcHeight: Math.min(400, dist * 0.5),
+              team: senderTeam,
+              senderId,
+              spin: random(0, Math.PI * 2),
+              spinSpeed: random(0.25, 0.45) * (Math.random() < 0.5 ? 1 : -1),
+              trail: [],
+            });
+
+            playGrenadeLaunch(senderTeam);
+          }, i * STREAM_DELAY);
+        }
+      }
+
+      function fireMissiles({ senderTeam, targets, count = 5, damage = 4,
+                              missileType = "rocket", senderId }) {
+        if (!targets || targets.length === 0) return;
+        const STREAM_DELAY = 120;
+        for (let i = 0; i < count; i++) {
+          setTimeout(() => {
+            const origin = getSenderOrigin(senderId, senderTeam);
+            const target = targets[i % targets.length];
+            if (!target || target.hp <= 0) return;
+            const angleToTarget = Math.atan2(
+              target.y - origin.y,
+              target.x - origin.x
+            );
             bullets.push({
-              x: startX, y: startY,
+              x: origin.x, y: origin.y,
               team: senderTeam,
               ownerId: "__gift__",
               senderId,
               targetId: target.id,
               angle: angleToTarget,
-              speed: 20,
-              damage: 4,
-              size: 16,
-              missileType: "heart",
-              heartFallback: true,
-              heartLastX: target.x,
-              heartLastY: target.y,
-              heartRetargetTimer: 0,
+              speed: 24,
+              damage,
+              size: 14,
+              missileType,
             });
           }, i * STREAM_DELAY);
         }
+      }
+
+      /* ============================================================
+         SAW BLADE HELPER
+      ============================================================ */
+      function drawSawBlade(x, y, radius, angle, color = "#e8e8f4", glow = "#ff00ff", spikes = 12) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.shadowColor = glow;
+        ctx.shadowBlur = 35;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(20,0,40,0.95)";
+        ctx.fill();
+
+        ctx.beginPath();
+        const outer = radius;
+        const inner = radius * 0.72;
+        for (let i = 0; i < spikes; i++) {
+          const a1 = (i / spikes) * Math.PI * 2;
+          const a2 = ((i + 0.5) / spikes) * Math.PI * 2;
+          const a3 = ((i + 1) / spikes) * Math.PI * 2;
+          const p1x = Math.cos(a1) * inner, p1y = Math.sin(a1) * inner;
+          const p2x = Math.cos(a2) * outer, p2y = Math.sin(a2) * outer;
+          const p3x = Math.cos(a3) * inner, p3y = Math.sin(a3) * inner;
+          if (i === 0) ctx.moveTo(p1x, p1y);
+          else ctx.lineTo(p1x, p1y);
+          ctx.lineTo(p2x, p2y);
+          ctx.lineTo(p3x, p3y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.18, 0, Math.PI * 2);
+        ctx.fillStyle = "#222";
+        ctx.fill();
+        ctx.strokeStyle = "#ff66ff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      /* ============================================================
+         GRENADE UPDATE
+      ============================================================ */
+      function updateGrenades() {
+        for (let i = grenades.length - 1; i >= 0; i--) {
+          const g = grenades[i];
+          g.frame++;
+          g.spin += g.spinSpeed;
+
+          const t = Math.min(1, g.frame / g.flightFrames);
+          const x = g.startX + (g.endX - g.startX) * t;
+          const arcOffset = -Math.sin(t * Math.PI) * g.arcHeight;
+          const y = g.startY + (g.endY - g.startY) * t + arcOffset;
+
+          g.trail.push({ x, y });
+          if (g.trail.length > 12) g.trail.shift();
+
+          ctx.save();
+          for (let k = 0; k < g.trail.length; k++) {
+            const tp = g.trail[k];
+            const alpha = (k / g.trail.length) * 0.35;
+            const r = 6 + k * 0.8;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(tp.x, tp.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(90,90,90,1)";
+            ctx.fill();
+          }
+          ctx.restore();
+
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(g.spin);
+          ctx.shadowColor = "#3aff6c";
+          ctx.shadowBlur = 25;
+
+          ctx.beginPath();
+          ctx.arc(0, 0, 22, 0, Math.PI * 2);
+          const bodyGrad = ctx.createRadialGradient(-6, -6, 2, 0, 0, 24);
+          bodyGrad.addColorStop(0, "#6aff9b");
+          bodyGrad.addColorStop(0.4, "#2e8c4d");
+          bodyGrad.addColorStop(1, "#0a2b17");
+          ctx.fillStyle = bodyGrad;
+          ctx.fill();
+
+          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          ctx.arc(-6, -6, 6, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(220,255,230,0.8)";
+          ctx.fill();
+
+          ctx.strokeStyle = "rgba(0,0,0,0.5)";
+          ctx.lineWidth = 1.5;
+          for (let s = -18; s <= 18; s += 6) {
+            ctx.beginPath();
+            ctx.moveTo(s, -22);
+            ctx.lineTo(s, 22);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(-22, s);
+            ctx.lineTo(22, s);
+            ctx.stroke();
+          }
+
+          ctx.beginPath();
+          ctx.arc(0, -22, 6, 0, Math.PI * 2);
+          ctx.fillStyle = "#d9d9d9";
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(6, -26, 5, 0, Math.PI * 2);
+          ctx.strokeStyle = "#ffcc55";
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.restore();
+
+          const blink = Math.floor(g.frame / 6) % 2 === 0;
+          if (blink) {
+            ctx.save();
+            ctx.globalAlpha = 0.9;
+            ctx.shadowColor = "#ff2222";
+            ctx.shadowBlur = 25;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "#ff3333";
+            ctx.fill();
+            ctx.restore();
+          }
+
+          if (t >= 1) {
+            explodeGrenade(g.endX, g.endY, g.team, g.senderId);
+            grenades.splice(i, 1);
+          }
+        }
+      }
+
+      function explodeGrenade(x, y, senderTeam, senderId) {
+        const enemyTeam = senderTeam === "A" ? "B" : "A";
+        const BLAST_RADIUS = 160;
+        const MAIN_DMG = 12;
+        const SPLASH_DMG = 6;
+
+        let primary = null;
+        let bestD = Infinity;
+        for (const p of players) {
+          if (p.team !== enemyTeam || p.hp <= 0) continue;
+          const d = Math.hypot(p.x - x, p.y - y);
+          if (d < bestD) { bestD = d; primary = p; }
+        }
+
+        for (const p of players) {
+          if (p.team !== enemyTeam || p.hp <= 0) continue;
+          const d = Math.hypot(p.x - x, p.y - y);
+          if (d > BLAST_RADIUS) continue;
+          const dmg = (p === primary) ? MAIN_DMG : SPLASH_DMG;
+          p.hp -= dmg;
+          createDamageNumber(p.x, p.y, dmg);
+          if (p.hp <= 0) {
+            createKillEffect(p);
+            playKillSound(panForTeamRandom(p.team));
+            rewardSenderForGiftKill(senderId, 25);
+          }
+        }
+
+        if (senderId) {
+          const sender = players.find(p => p.id === senderId && p.hp > 0);
+          if (sender) {
+            const healed = sender.heal(2);
+            if (healed > 0) createHealNumber(sender.x, sender.y, healed);
+          }
+        }
+
+        effects.push({
+          type: "grenadeBlast",
+          x, y,
+          team: senderTeam,
+          life: 45, maxLife: 45,
+          radius: BLAST_RADIUS,
+        });
+
+        for (let k = 0; k < 14; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = random(6, 14);
+          effects.push({
+            type: "grenadeShard",
+            x, y,
+            vx: Math.cos(a) * sp,
+            vy: Math.sin(a) * sp,
+            angle: a,
+            spin: random(-0.4, 0.4),
+            team: senderTeam,
+            life: 70, maxLife: 70,
+          });
+        }
+
+        for (let k = 0; k < 8; k++) {
+          const a = Math.random() * Math.PI * 2;
+          effects.push({
+            type: "spark",
+            x: x + Math.cos(a) * random(0, 30),
+            y: y + Math.sin(a) * random(0, 30),
+            team: senderTeam,
+            life: 20, maxLife: 20,
+          });
+        }
+
+        screenShake = Math.max(screenShake, 22);
+        playGrenadeExplosion(senderTeam);
       }
 
       /* ============================================================
@@ -997,89 +1297,65 @@
           const isRose = bullet.ownerId === "__gift__" && bullet.missileType === "rose";
           const isHeart = bullet.ownerId === "__gift__" && bullet.missileType === "heart";
 
-          if (isRose && bullet.spiral) {
-            bullet.spiralFrames = (bullet.spiralFrames || 0) + 1;
+          if (isRose && bullet.homing) {
+            const target = players.find(p => p.id === bullet.targetId && p.hp > 0);
 
-            const startAt = bullet.spiralStartAt || 0;
-            const diveAt = bullet.spiralDiveAt || (startAt + 40);
+            let distanceToTarget = Infinity;
 
-            if (bullet.spiralFrames <= startAt) {
-              bullet.x += Math.cos(bullet.angle) * bullet.speed;
-              bullet.y += Math.sin(bullet.angle) * bullet.speed;
-              bullet.spin = (bullet.spin || 0) + 0.25;
+            if (target) {
+              const dx = target.x - bullet.x;
+              const dy = target.y - bullet.y;
+              distanceToTarget = Math.hypot(dx, dy);
 
-              if (Math.random() < 0.7) {
-                effects.push({
-                  type: "rosePetal",
-                  x: bullet.x - Math.cos(bullet.angle) * bullet.size * 1.2,
-                  y: bullet.y - Math.sin(bullet.angle) * bullet.size * 1.2,
-                  team: bullet.team,
-                  life: 25, maxLife: 25,
-                });
-              }
-              if (Math.random() < 0.4) {
-                effects.push({
-                  type: "spark",
-                  x: bullet.x - Math.cos(bullet.angle) * bullet.size * 2,
-                  y: bullet.y - Math.sin(bullet.angle) * bullet.size * 2,
-                  team: bullet.team,
-                  life: 15, maxLife: 15,
-                });
-              }
+              const wantAngle = Math.atan2(dy, dx);
+              let diff = wantAngle - bullet.angle;
+              while (diff > Math.PI) diff -= Math.PI * 2;
+              while (diff < -Math.PI) diff += Math.PI * 2;
+              const homing = distanceToTarget < 250 ? 0.5 : 0.25;
+              bullet.angle += diff * homing;
             }
-            else if (bullet.spiralFrames < diveAt) {
-              bullet.spiralAngle += bullet.spiralSpeed * bullet.spiralDirection;
-              bullet.x = bullet.spiralCenterX +
-                         Math.cos(bullet.spiralAngle) * bullet.spiralRadius;
-              bullet.y = bullet.spiralCenterY +
-                         Math.sin(bullet.spiralAngle) * bullet.spiralRadius;
-              bullet.spin = (bullet.spin || 0) + 0.2;
 
-              if (Math.random() < 0.6) {
-                effects.push({
-                  type: "rosePetal",
-                  x: bullet.x, y: bullet.y,
-                  team: bullet.team,
-                  life: 30, maxLife: 30,
-                });
-              }
+            const arc = bullet.arcAmount || 120;
+            const dir = bullet.arcDirection || 1;
+            const dur = bullet.arcDuration || 45;
+
+            bullet.arcPhase = (bullet.arcPhase || 0) + (Math.PI / dur);
+
+            const arcStrength = Math.min(1, Math.max(0,
+              (distanceToTarget - 120) / 280));
+            const arcOffset = Math.sin(bullet.arcPhase) * arc * dir * arcStrength;
+
+            const straightX = Math.cos(bullet.angle) * bullet.speed;
+            const straightY = Math.sin(bullet.angle) * bullet.speed;
+            const perpX = -Math.sin(bullet.angle);
+            const perpY = Math.cos(bullet.angle);
+
+            bullet.x += straightX + perpX * arcOffset * 0.14;
+            bullet.y += straightY + perpY * arcOffset * 0.14;
+
+            bullet.life = (bullet.life || 200) - 1;
+            if (bullet.life <= 0) {
+              bullets.splice(i, 1);
+              continue;
             }
-            else {
-              const target = players.find(p => p.id === bullet.targetId && p.hp > 0);
-              if (target) {
-                const dx = target.x - bullet.x;
-                const dy = target.y - bullet.y;
-                const wantAngle = Math.atan2(dy, dx);
-                let diff = wantAngle - bullet.angle;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                bullet.angle += diff * 0.3;
-              }
-              bullet.x += Math.cos(bullet.angle) * (bullet.speed + 10);
-              bullet.y += Math.sin(bullet.angle) * (bullet.speed + 10);
-              bullet.spin = (bullet.spin || 0) + 0.45;
 
-              if (Math.random() < 0.5) {
-                effects.push({
-                  type: "rosePetal",
-                  x: bullet.x, y: bullet.y,
-                  team: bullet.team,
-                  life: 20, maxLife: 20,
-                });
-              }
+            bullet.trailTimer = (bullet.trailTimer || 0) + 1;
+            if (bullet.trailTimer % 2 === 0) {
+              effects.push({
+                type: "rosePetal",
+                x: bullet.x, y: bullet.y,
+                team: bullet.team,
+                life: 25, maxLife: 25,
+              });
             }
           }
           else if (isHeart && bullet.heartFallback) {
-            // Homing heart. Tracks its target. If target is dead,
-            // retargets to nearest living enemy. If none alive,
-            // flies to last known spot and explodes.
             const enemyTeam = bullet.team === "A" ? "B" : "A";
             let target = players.find(p => p.id === bullet.targetId && p.hp > 0);
 
             if (!target) {
               const alive = players.filter(p => p.team === enemyTeam && p.hp > 0);
               if (alive.length > 0) {
-                // retarget to nearest living enemy
                 let nearest = alive[0];
                 let bestD = Math.hypot(bullet.x - nearest.x, bullet.y - nearest.y);
                 for (let k = 1; k < alive.length; k++) {
@@ -1091,7 +1367,6 @@
                 bullet.heartLastX = target.x;
                 bullet.heartLastY = target.y;
               } else {
-                // No living enemies — fly to last known spot then explode
                 target = {
                   id: "__none__",
                   x: bullet.heartLastX,
@@ -1116,12 +1391,10 @@
             bullet.x += Math.cos(bullet.angle) * bullet.speed;
             bullet.y += Math.sin(bullet.angle) * bullet.speed;
 
-            // Explode on arrival at last-known spot if no target
             if (target.id === "__none__") {
               const dToSpot = Math.hypot(bullet.x - bullet.heartLastX,
                                          bullet.y - bullet.heartLastY);
               if (dToSpot < 20) {
-                // fizzle with a small explosion, no damage (no enemies anyway)
                 createExplosion(bullet.x, bullet.y, bullet.team);
                 bullets.splice(i, 1);
                 continue;
@@ -1133,8 +1406,8 @@
             bullet.y += Math.sin(bullet.angle) * bullet.speed;
           }
 
-          if (bullet.x < -80 || bullet.x > GAME_WIDTH + 80 ||
-              bullet.y < -80 || bullet.y > GAME_HEIGHT + 80) {
+          if (bullet.x < -120 || bullet.x > GAME_WIDTH + 120 ||
+              bullet.y < -120 || bullet.y > GAME_HEIGHT + 120) {
             bullets.splice(i, 1);
             continue;
           }
@@ -1165,9 +1438,6 @@
             }
           }
           else if (isGift && bullet.missileType === "rose") {
-            const spinTime = Date.now() * 0.008;
-            const baseSpin = bullet.spin || 0;
-
             const flameFlicker = 0.8 + Math.random() * 0.4;
             const flameLen = bullet.size * (1.4 + flameFlicker * 0.6);
             const flameWid = bullet.size * 0.7 * flameFlicker;
@@ -1186,23 +1456,8 @@
             ctx.lineTo(0, flameWid);
             ctx.closePath();
             ctx.fill();
-
-            ctx.shadowColor = "#ffeeaa";
-            ctx.shadowBlur = 20;
-            const innerGrad = ctx.createLinearGradient(-flameLen * 0.6, 0, 0, 0);
-            innerGrad.addColorStop(0, "rgba(255,200,80,0)");
-            innerGrad.addColorStop(1, "rgba(255,255,220,1)");
-            ctx.fillStyle = innerGrad;
-            ctx.beginPath();
-            ctx.moveTo(-flameLen * 0.6, 0);
-            ctx.lineTo(0, -flameWid * 0.5);
-            ctx.lineTo(0, flameWid * 0.5);
-            ctx.closePath();
-            ctx.fill();
             ctx.restore();
 
-            ctx.save();
-            ctx.rotate(baseSpin + spinTime);
             ctx.shadowColor = bullet.team === "A"
               ? "rgba(255,80,120,0.9)"
               : "rgba(80,200,255,0.9)";
@@ -1211,7 +1466,53 @@
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText("🌹", 0, 0);
-            ctx.restore();
+          }
+          else if (isGift && bullet.missileType === "rocket") {
+            const bodyLen = bullet.size * 5;
+            const bodyWid = bullet.size * 1.3;
+            const flameLen = bullet.size * (2 + Math.random());
+
+            ctx.shadowColor = "#ff6600";
+            ctx.shadowBlur = 25;
+
+            const fg = ctx.createLinearGradient(-bodyLen * 0.5 - flameLen, 0, -bodyLen * 0.5, 0);
+            fg.addColorStop(0, "rgba(255,50,0,0)");
+            fg.addColorStop(0.5, "rgba(255,140,30,0.85)");
+            fg.addColorStop(1, "rgba(255,240,140,1)");
+            ctx.fillStyle = fg;
+            ctx.beginPath();
+            ctx.moveTo(-bodyLen * 0.5 - flameLen, 0);
+            ctx.lineTo(-bodyLen * 0.5, -bodyWid * 0.8);
+            ctx.lineTo(-bodyLen * 0.5, bodyWid * 0.8);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#dddddd";
+            ctx.beginPath();
+            ctx.roundRect(-bodyLen * 0.5, -bodyWid * 0.5, bodyLen, bodyWid, bodyWid * 0.5);
+            ctx.fill();
+
+            ctx.fillStyle = teamColor;
+            ctx.beginPath();
+            ctx.moveTo(bodyLen * 0.5, -bodyWid * 0.5);
+            ctx.lineTo(bodyLen * 0.5, bodyWid * 0.5);
+            ctx.lineTo(bodyLen * 0.5 + bodyWid * 1.2, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(-bodyLen * 0.4, -bodyWid * 0.5);
+            ctx.lineTo(-bodyLen * 0.5, -bodyWid * 1.4);
+            ctx.lineTo(-bodyLen * 0.25, -bodyWid * 0.5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-bodyLen * 0.4, bodyWid * 0.5);
+            ctx.lineTo(-bodyLen * 0.5, bodyWid * 1.4);
+            ctx.lineTo(-bodyLen * 0.25, bodyWid * 0.5);
+            ctx.closePath();
+            ctx.fill();
           }
           else if (isGift) {
             ctx.shadowColor = teamGlow;
@@ -1234,15 +1535,6 @@
             ctx.fillStyle = "#ffffff";
             ctx.beginPath();
             ctx.arc(bodyLen * 0.5, 0, bodyWid * 0.55, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowColor = teamGlow;
-            ctx.shadowBlur = 20;
-            ctx.fillStyle = teamGlow;
-            ctx.beginPath();
-            ctx.moveTo(-bodyLen * 0.5, -bodyWid * 0.4);
-            ctx.lineTo(-bodyLen * 0.5, bodyWid * 0.4);
-            ctx.lineTo(-bodyLen * 0.5 - bullet.size * 2.2, 0);
-            ctx.closePath();
             ctx.fill();
           }
           else {
@@ -1272,6 +1564,18 @@
           if (hit) {
             hit.hp -= bullet.damage;
             createDamageNumber(hit.x, hit.y, Math.round(bullet.damage));
+
+            if (isGift && bullet.senderId) {
+              const sender = players.find(p => p.id === bullet.senderId && p.hp > 0);
+              if (sender) {
+                let healAmt = 1;
+                if (bullet.missileType === "heart") healAmt = 2;
+                else if (bullet.missileType === "rocket") healAmt = 1;
+                else if (bullet.missileType === "rose") healAmt = 1;
+                const healed = sender.heal(healAmt);
+                if (healed > 0) createHealNumber(sender.x, sender.y, healed);
+              }
+            }
 
             const hitPan = panForTeamRandom(hit.team);
             if (isGift) {
@@ -1321,7 +1625,15 @@
           life: 60, maxLife: 60,
         });
       }
-      function createHealNumber() { /* silent on purpose */ }
+      function createHealNumber(x, y, amount) {
+        effects.push({
+          type: "healNumber",
+          x: x + random(-15, 15),
+          y: y - 30,
+          amount: amount,
+          life: 60, maxLife: 60,
+        });
+      }
 
       function drawLightningArc(x1, y1, x2, y2, alpha) {
         if (alpha <= 0) return;
@@ -1367,7 +1679,8 @@
               effect.type !== "vortexPull" &&
               effect.type !== "vortexSpiral" &&
               effect.type !== "deathSawEmerge" &&
-              effect.type !== "meteor") continue;
+              effect.type !== "meteor" &&
+              effect.type !== "bigHeart") continue;
 
           if (effect.type === "giftLaunch") {
             const alpha = 1 - progress;
@@ -1376,16 +1689,16 @@
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
             ctx.strokeStyle = effect.team === "A"
-              ? `rgba(255,80,120,${alpha})`
-              : `rgba(80,200,255,${alpha})`;
+              ? `rgba(120,200,255,${alpha})`
+              : `rgba(120,255,150,${alpha})`;
             ctx.lineWidth = 10 * (1 - progress) + 2;
             ctx.stroke();
             ctx.save();
             ctx.globalAlpha = alpha;
-            ctx.font = "80px Arial";
+            ctx.font = "90px Arial";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.shadowColor = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
+            ctx.shadowColor = effect.team === "A" ? "#5cc9ff" : "#3aff6c";
             ctx.shadowBlur = 30;
             ctx.fillText(effect.icon, effect.x, effect.y - progress * 90);
             ctx.restore();
@@ -1399,10 +1712,10 @@
             ctx.beginPath();
             ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
             ctx.strokeStyle = effect.team === "A"
-              ? `rgba(255,80,120,${alpha})`
-              : `rgba(80,200,255,${alpha})`;
+              ? `rgba(120,200,255,${alpha})`
+              : `rgba(120,255,150,${alpha})`;
             ctx.lineWidth = 6;
-            ctx.shadowColor = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
+            ctx.shadowColor = effect.team === "A" ? "#5cc9ff" : "#3aff6c";
             ctx.shadowBlur = 25;
             ctx.stroke();
             ctx.shadowBlur = 0;
@@ -1415,7 +1728,7 @@
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
             ctx.strokeStyle = effect.team === "A"
-              ? `rgba(255,48,79,${a})` : `rgba(0,217,255,${a})`;
+              ? `rgba(120,200,255,${a})` : `rgba(120,255,150,${a})`;
             ctx.lineWidth = 10;
             ctx.stroke();
           }
@@ -1423,7 +1736,7 @@
           if (effect.type === "explosion") {
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
-            const tc = effect.team === "A" ? "255,48,79" : "0,217,255";
+            const tc = effect.team === "A" ? "120,200,255" : "120,255,150";
             const r1 = 15 + progress * 100;
             const grad = ctx.createRadialGradient(
               effect.x, effect.y, 0, effect.x, effect.y, r1);
@@ -1452,8 +1765,8 @@
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, size, 0, Math.PI * 2);
             ctx.fillStyle = effect.team === "A"
-              ? `rgba(255,120,150,${alpha})`
-              : `rgba(120,220,255,${alpha})`;
+              ? `rgba(120,200,255,${alpha})`
+              : `rgba(120,255,150,${alpha})`;
             ctx.fill();
           }
 
@@ -1463,9 +1776,27 @@
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, 4 + progress * 6, 0, Math.PI * 2);
             ctx.fillStyle = effect.team === "A"
-              ? `rgba(255,120,150,${alpha})`
-              : `rgba(120,220,255,${alpha})`;
+              ? `rgba(120,200,255,${alpha})`
+              : `rgba(120,255,150,${alpha})`;
             ctx.fill();
+          }
+
+          if (effect.type === "roseLaunch") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            const r = 10 + progress * 50;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
+            ctx.shadowBlur = 30;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
+            ctx.strokeStyle = effect.team === "A"
+              ? `rgba(255,100,150,${alpha})`
+              : `rgba(100,200,255,${alpha})`;
+            ctx.lineWidth = 8 * (1 - progress) + 2;
+            ctx.stroke();
+            ctx.restore();
           }
 
           if (effect.type === "heartTrail") {
@@ -1489,21 +1820,6 @@
             ctx.textBaseline = "middle";
             ctx.fillStyle = effect.team === "A" ? "#ff5c8a" : "#5cc9ff";
             ctx.fillText("🌸", effect.x, effect.y);
-            ctx.restore();
-          }
-
-          if (effect.type === "emojiParticle") {
-            effect.x += effect.vx;
-            effect.y += effect.vy;
-            effect.vx *= 0.94;
-            effect.vy *= 0.94;
-            const alpha = 1 - progress;
-            if (alpha < 0.1) continue;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.font = "32px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(effect.emoji, effect.x, effect.y);
             ctx.restore();
           }
 
@@ -1532,30 +1848,265 @@
             ctx.restore();
           }
 
-          if (effect.type === "brainwave") {
+          if (effect.type === "healNumber") {
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
-            const r = 80 + progress * 500;
+            const y = effect.y - progress * 40;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.textAlign = "center";
+            ctx.font = "bold 32px Arial";
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 4;
+            ctx.strokeText("+" + effect.amount, effect.x, y);
+            ctx.fillStyle = "#39ff14";
+            ctx.fillText("+" + effect.amount, effect.x, y);
+            ctx.restore();
+          }
+
+          if (effect.type === "likeHeal") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            const r = 40 + progress * 60;
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(160,80,255,${alpha * 0.8})`;
-            ctx.lineWidth = 12 * (1 - progress) + 3;
+            ctx.strokeStyle = `rgba(57,255,20,${alpha})`;
+            ctx.lineWidth = 6 * (1 - progress) + 2;
+            ctx.shadowColor = "#39ff14";
+            ctx.shadowBlur = 25;
             ctx.stroke();
+            ctx.shadowBlur = 0;
           }
-          if (effect.type === "brainExplode") {
+
+          if (effect.type === "grenadeBlast") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            const coreR = 30 + progress * 60;
+            const coreGrad = ctx.createRadialGradient(
+              effect.x, effect.y, 0, effect.x, effect.y, coreR);
+            coreGrad.addColorStop(0, `rgba(255,255,220,${alpha})`);
+            coreGrad.addColorStop(0.35, `rgba(255,180,60,${alpha * 0.85})`);
+            coreGrad.addColorStop(0.7, `rgba(255,80,0,${alpha * 0.6})`);
+            coreGrad.addColorStop(1, "rgba(120,20,0,0)");
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, coreR, 0, Math.PI * 2);
+            ctx.fill();
+            if (progress < 0.7) {
+              const ringR = progress * (effect.radius || 160);
+              ctx.beginPath();
+              ctx.arc(effect.x, effect.y, ringR, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(255,220,140,${alpha * 0.8})`;
+              ctx.lineWidth = 10 * (1 - progress) + 2;
+              ctx.stroke();
+            }
+          }
+
+          if (effect.type === "grenadeShard") {
+            effect.x += effect.vx;
+            effect.y += effect.vy;
+            effect.vx *= 0.94;
+            effect.vy *= 0.94;
+            effect.angle += effect.spin;
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
             ctx.save();
             ctx.globalAlpha = alpha;
-            ctx.font = "60px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText("🧠", effect.x, effect.y);
+            ctx.translate(effect.x, effect.y);
+            ctx.rotate(effect.angle);
             ctx.beginPath();
-            ctx.arc(effect.x, effect.y, 20 + progress * 60, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(255,80,180,${alpha})`;
-            ctx.lineWidth = 8 * (1 - progress) + 2;
-            ctx.stroke();
+            ctx.moveTo(8, 0);
+            ctx.lineTo(-4, -3);
+            ctx.lineTo(-4, 3);
+            ctx.closePath();
+            const g2 = ctx.createLinearGradient(-4, -3, 8, 3);
+            g2.addColorStop(0, "rgba(80,80,80,0.9)");
+            g2.addColorStop(0.5, "rgba(200,200,200,1)");
+            g2.addColorStop(1, "rgba(60,60,60,0.9)");
+            ctx.fillStyle = g2;
+            ctx.fill();
             ctx.restore();
+          }
+
+          /* ----- MIND BLOWN ----- */
+          if (effect.type === "mindCharge") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            const r = 20 + progress * 60;
+            const pulse = 1 + Math.sin(Date.now() * 0.03) * 0.15;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = "#b060ff";
+            ctx.shadowBlur = 40;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, r * pulse, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(180,80,255,0.6)";
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, r * pulse * 0.55, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255,255,255,0.9)";
+            ctx.fill();
+            ctx.restore();
+          }
+
+          if (effect.type === "mindLaser") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+
+            const dx = effect.endX - effect.startX;
+            const dy = effect.endY - effect.startY;
+            const angle = Math.atan2(dy, dx);
+            const len = Math.hypot(dx, dy);
+
+            ctx.save();
+            ctx.translate(effect.startX, effect.startY);
+            ctx.rotate(angle);
+
+            const flicker = 0.85 + Math.random() * 0.3;
+            ctx.shadowColor = "#c060ff";
+            ctx.shadowBlur = 40;
+            ctx.fillStyle = `rgba(180,80,255,${alpha * 0.5})`;
+            ctx.beginPath();
+            ctx.roundRect(0, -22 * flicker, len, 44 * flicker, 22);
+            ctx.fill();
+
+            ctx.shadowBlur = 20;
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.beginPath();
+            ctx.roundRect(0, -8 * flicker, len, 16 * flicker, 8);
+            ctx.fill();
+
+            for (let s = 0; s < 4; s++) {
+              const sx = Math.random() * 40;
+              ctx.beginPath();
+              ctx.arc(sx, (Math.random() - 0.5) * 40, 4, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(255,220,255,${alpha})`;
+              ctx.fill();
+            }
+
+            ctx.restore();
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = "#ff80ff";
+            ctx.shadowBlur = 60;
+            const flare = 40 + Math.sin(Date.now() * 0.05) * 10;
+            ctx.beginPath();
+            ctx.arc(effect.endX, effect.endY, flare, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255,200,255,0.8)";
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(effect.endX, effect.endY, flare * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255,255,255,1)";
+            ctx.fill();
+            ctx.restore();
+          }
+
+          if (effect.type === "mindImpact") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            const r = 30 + progress * 80;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(200,100,255,${alpha})`;
+            ctx.lineWidth = 10 * (1 - progress) + 2;
+            ctx.shadowColor = "#c060ff";
+            ctx.shadowBlur = 30;
+            ctx.stroke();
+            ctx.font = `${50 + progress * 20}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.fillText("🧠", effect.x, effect.y);
+            ctx.restore();
+          }
+
+          /* ----- BIG HEART ----- */
+          if (effect.type === "bigHeart") {
+            effect.stageTimer++;
+            const p = Math.min(1, effect.stageTimer / effect.flyDuration);
+            const eased = 1 - Math.pow(1 - p, 2);
+
+            effect.x = effect.startX + (effect.targetX - effect.startX) * eased;
+            effect.y = effect.startY + (effect.targetY - effect.startY) * eased;
+            effect.size = effect.startSize + (effect.endSize - effect.startSize) * eased;
+
+            ctx.save();
+            ctx.shadowColor = "#ff3e8a";
+            ctx.shadowBlur = 40 + effect.size * 0.4;
+            ctx.font = `${effect.size}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("💗", effect.x, effect.y);
+            ctx.restore();
+
+            if (p >= 1 && !effect.exploded) {
+              effect.exploded = true;
+
+              effects.push({
+                type: "heartBurst",
+                x: effect.x, y: effect.y,
+                life: 45, maxLife: 45,
+                team: effect.team,
+              });
+              playHeartSound(effect.team);
+
+              const enemyTeam = effect.team === "A" ? "B" : "A";
+              for (let hI = 0; hI < 5; hI++) {
+                let target = effect.hitList[hI];
+                if (!target || target.hp <= 0) {
+                  const alive = players.filter(pl => pl.team === enemyTeam && pl.hp > 0);
+                  if (alive.length === 0) target = null;
+                  else target = alive[Math.floor(Math.random() * alive.length)];
+                }
+
+                const angleOut = (Math.PI * 2 * hI) / 5 + Math.random() * 0.3;
+                const spawnX = effect.x + Math.cos(angleOut) * 30;
+                const spawnY = effect.y + Math.sin(angleOut) * 30;
+
+                const aimAngle = target
+                  ? Math.atan2(target.y - spawnY, target.x - spawnX)
+                  : angleOut;
+
+                bullets.push({
+                  x: spawnX, y: spawnY,
+                  team: effect.team,
+                  ownerId: "__gift__",
+                  senderId: effect.senderId,
+                  targetId: target ? target.id : "__none__",
+                  angle: aimAngle,
+                  speed: 24,
+                  damage: 5,
+                  size: 16,
+                  missileType: "heart",
+                  heartFallback: true,
+                  heartLastX: target ? target.x : spawnX + Math.cos(angleOut) * 400,
+                  heartLastY: target ? target.y : spawnY + Math.sin(angleOut) * 400,
+                });
+              }
+
+              effect.life = Math.min(effect.life, 5);
+            }
+          }
+
+          if (effect.type === "heartBurst") {
+            const alpha = 1 - progress;
+            if (alpha < 0.05) continue;
+            for (let ring = 0; ring < 3; ring++) {
+              const rp = Math.max(0, progress - ring * 0.12);
+              const r = rp * (300 + ring * 120);
+              ctx.beginPath();
+              ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
+              ctx.strokeStyle = ring === 0
+                ? `rgba(255,255,255,${alpha})`
+                : ring === 1
+                  ? `rgba(255,120,180,${alpha * 0.85})`
+                  : `rgba(255,60,140,${alpha * 0.6})`;
+              ctx.lineWidth = 18 * (1 - rp) + 3;
+              ctx.stroke();
+            }
           }
 
           if (effect.type === "huntingGhost") {
@@ -1568,7 +2119,6 @@
 
               effect.x = sender.x;
               effect.y = sender.y;
-              effect.emergeProgress = p;
 
               const size = 90 * p;
               ctx.save();
@@ -1580,15 +2130,6 @@
               ctx.globalAlpha = p;
               ctx.fillStyle = "#ffffff";
               ctx.fillText("👻", effect.x, effect.y);
-              ctx.restore();
-
-              ctx.save();
-              ctx.globalAlpha = (1 - p) * 0.8;
-              ctx.beginPath();
-              ctx.arc(effect.x, effect.y, 30 + p * 80, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(136,255,187,${1 - p})`;
-              ctx.lineWidth = 8 * (1 - p) + 2;
-              ctx.stroke();
               ctx.restore();
 
               if (p >= 1) {
@@ -1620,39 +2161,34 @@
 
             if (dist < speed + 4) {
               if (target.hp > 0) {
-                const DMG = 2;
-                target.hp -= DMG;
-                createDamageNumber(target.x, target.y, DMG);
-
-                if (effect.senderId) {
-                  const sender = players.find(p => p.id === effect.senderId && p.hp > 0);
-                  if (sender) sender.heal(5);
-                }
-
                 effects.push({
                   type: "ghostTag",
                   x: target.x, y: target.y,
                   team: target.team,
                   life: 60, maxLife: 60,
                 });
-                for (let k = 0; k < 3; k++) {
-                  const a = Math.random() * Math.PI * 2;
-                  effects.push({
-                    type: "emojiParticle",
-                    x: target.x, y: target.y,
-                    vx: Math.cos(a) * random(3, 6),
-                    vy: Math.sin(a) * random(3, 6) - 2,
-                    emoji: Math.random() < 0.5 ? "👻" : "💀",
-                    life: 60, maxLife: 60,
-                  });
-                }
-                if (target.hp <= 0) {
-                  createKillEffect(target);
-                  playKillSound(panForTeamRandom(target.team));
-                  rewardSenderForGiftKill(effect.senderId, 25);
-                }
+
+                setTimeout(() => {
+                  if (target.hp <= 0) return;
+                  const DMG = 8;
+                  target.hp -= DMG;
+                  createDamageNumber(target.x, target.y, DMG);
+
+                  if (effect.senderId) {
+                    const sender = players.find(p => p.id === effect.senderId && p.hp > 0);
+                    if (sender) {
+                      const healed = sender.heal(4);
+                      if (healed > 0) createHealNumber(sender.x, sender.y, healed);
+                    }
+                  }
+
+                  if (target.hp <= 0) {
+                    createKillEffect(target);
+                    playKillSound(panForTeamRandom(target.team));
+                    rewardSenderForGiftKill(effect.senderId, 25);
+                  }
+                }, 120);
               }
-              effect.hitsDone = (effect.hitsDone || 0) + 1;
               effect.currentIndex++;
             } else {
               effect.x += (dx / dist) * speed;
@@ -1679,10 +2215,9 @@
 
             ctx.save();
             const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.1;
-            const size = 90 * pulse;
             ctx.shadowColor = "#88ffbb";
             ctx.shadowBlur = 40;
-            ctx.font = `${size}px Arial`;
+            ctx.font = `${90 * pulse}px Arial`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillStyle = "#ffffff";
@@ -1720,69 +2255,37 @@
             else { effect.phase = "done"; effect.life = Math.min(effect.life, 15); continue; }
 
             if (effect.phase === "strike") {
-              const p = effect.stageTimer / strikeDuration;
               const first = chainList[0];
               if (!first || first.hp <= 0) continue;
-
               const sender = players.find(pl => pl.id === effect.senderId && pl.hp > 0);
               const startX = sender ? sender.x : first.x;
               const startY = sender ? sender.y : 0;
-
-              ctx.save();
-              ctx.strokeStyle = `rgba(180,220,255,${1 - p})`;
-              ctx.lineWidth = 14;
-              ctx.beginPath();
-              ctx.moveTo(startX, startY);
-              const segments = 12;
-              for (let k = 1; k <= segments; k++) {
-                const t = k / segments;
-                const tx = startX + (first.x - startX) * t +
-                           (Math.random() - 0.5) * 60;
-                const ty = startY + (first.y - startY) * t +
-                           (Math.random() - 0.5) * 60;
-                ctx.lineTo(tx, ty);
-              }
-              ctx.lineTo(first.x, first.y);
-              ctx.stroke();
-              ctx.strokeStyle = `rgba(255,255,255,${1 - p})`;
-              ctx.lineWidth = 5;
-              ctx.stroke();
-              ctx.restore();
+              drawLightningArc(startX, startY, first.x, first.y, 0.9);
             }
 
             if (effect.phase === "chain") {
               const idx = effect.currentIndex;
-              for (let i = 0; i < idx; i++) {
-                const a = chainList[i], b = chainList[i + 1];
+              for (let ci = 0; ci < idx; ci++) {
+                const a = chainList[ci], b = chainList[ci + 1];
                 if (a && b && a.hp > 0 && b.hp > 0)
                   drawLightningArc(a.x, a.y, b.x, b.y, 0.7);
-              }
-              if (idx > 0 && chainList[idx]) {
-                const prev = chainList[idx - 1];
-                if (prev && prev.hp > 0)
-                  drawLightningArc(prev.x, prev.y,
-                                   chainList[idx].x, chainList[idx].y, 0.9);
               }
             }
 
             if (effect.phase === "arcing") {
               const alive = chainList.filter(t => t.hp > 0);
               effect.arcingCooldowns = effect.arcingCooldowns || {};
-
               for (let a = 0; a < alive.length; a++) {
                 for (let b = a + 1; b < alive.length; b++) {
                   if (Math.random() < 0.7) {
                     const ta = alive[a];
                     const tb = alive[b];
-
                     drawLightningArc(ta.x, ta.y, tb.x, tb.y,
                                      0.5 + Math.random() * 0.3);
-
                     const key = ta.id + "|" + tb.id;
                     const lastHit = effect.arcingCooldowns[key] || 0;
                     if (effect.stageTimer - lastHit > 6) {
                       effect.arcingCooldowns[key] = effect.stageTimer;
-
                       if (ta.hp > 0) {
                         ta.hp -= 1;
                         createDamageNumber(ta.x, ta.y, 1);
@@ -1792,7 +2295,6 @@
                           rewardSenderForGiftKill(effect.senderId, 25);
                         }
                       }
-
                       if (tb.hp > 0) {
                         tb.hp -= 1;
                         createDamageNumber(tb.x, tb.y, 1);
@@ -1827,79 +2329,22 @@
             ctx.restore();
           }
 
-          /* ===== DEATH SAW EMERGE: small at gifter -> fly small -> grow big at enemy center ===== */
           if (effect.type === "deathSawEmerge") {
             effect.stageTimer = (effect.stageTimer || 0) + 1;
             const st = effect.stageTimer;
-
             const SMALL_SIZE = 22;
-            const BIG_SIZE   = 85;
+            const BIG_SIZE = 85;
 
             if (effect.phase === "emerging") {
               const p = Math.min(1, st / effect.emergeDuration);
               const sender = effect.senderRef;
               if (!sender || sender.hp <= 0) { effect.life = 0; continue; }
-
               effect.x = sender.x;
               effect.y = sender.y;
               effect.bladeAngle = (effect.bladeAngle || 0) + 0.5;
               effect.currentSize = SMALL_SIZE * p;
-              effect.currentTeeth = Math.max(1, Math.floor(10 * p));
 
-              ctx.save();
-              ctx.translate(effect.x, effect.y);
-              ctx.rotate(effect.bladeAngle);
-              ctx.shadowColor = "#ff00ff";
-              ctx.shadowBlur = 40 * p;
-
-              ctx.beginPath();
-              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(20,0,40,0.9)";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(220,220,240,${p})`;
-              ctx.lineWidth = Math.max(2, 10 * (effect.currentSize / BIG_SIZE));
-              ctx.stroke();
-
-              for (let b = 0; b < effect.currentTeeth; b++) {
-                const toothAngle = (Math.PI * 2 * b) / Math.max(1, effect.currentTeeth);
-                const toothScale = effect.currentSize / BIG_SIZE;
-                const toothStartX = Math.cos(toothAngle) * (effect.currentSize - 5 * toothScale);
-                const toothStartY = Math.sin(toothAngle) * (effect.currentSize - 5 * toothScale);
-                const toothTipX = Math.cos(toothAngle) * (effect.currentSize + 30 * toothScale);
-                const toothTipY = Math.sin(toothAngle) * (effect.currentSize + 30 * toothScale);
-                const perpAngle = toothAngle + Math.PI / 2;
-                const perpX = Math.cos(perpAngle) * 18 * toothScale;
-                const perpY = Math.sin(perpAngle) * 18 * toothScale;
-
-                ctx.beginPath();
-                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
-                ctx.lineTo(toothTipX, toothTipY);
-                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
-                ctx.closePath();
-                ctx.fillStyle = `rgba(240,240,255,${p})`;
-                ctx.fill();
-              }
-
-              ctx.beginPath();
-              ctx.arc(0, 0, Math.max(1, effect.currentSize * 0.35), 0, Math.PI * 2);
-              ctx.fillStyle = "#ff00ff";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, Math.max(0.5, effect.currentSize * 0.18), 0, Math.PI * 2);
-              ctx.fillStyle = "#ffffff";
-              ctx.fill();
-              ctx.restore();
-
-              ctx.save();
-              ctx.globalAlpha = (1 - p) * 0.7;
-              ctx.beginPath();
-              ctx.arc(effect.x, effect.y, 20 + p * 70, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(255,0,255,${1 - p})`;
-              ctx.lineWidth = 6 * (1 - p) + 2;
-              ctx.stroke();
-              ctx.restore();
+              drawSawBlade(effect.x, effect.y, effect.currentSize, effect.bladeAngle);
 
               if (p >= 1) {
                 effect.phase = "flying";
@@ -1910,78 +2355,18 @@
 
             if (effect.phase === "flying") {
               const p = Math.min(1, st / effect.flyDuration);
-              const sx = effect.startX;
-              const sy = effect.startY;
-              const tx = effect.centerX;
-              const ty = effect.centerY;
-
+              const sx = effect.startX, sy = effect.startY;
+              const tx = effect.centerX, ty = effect.centerY;
               effect.x = sx + (tx - sx) * p;
               effect.y = sy + (ty - sy) * p;
               effect.bladeAngle = (effect.bladeAngle || 0) + 0.6;
-
               effect.currentSize = SMALL_SIZE;
-              effect.currentTeeth = 10;
 
-              ctx.save();
-              ctx.translate(effect.x, effect.y);
-              ctx.rotate(effect.bladeAngle);
-              ctx.shadowColor = "#ff00ff";
-              ctx.shadowBlur = 25;
-
-              ctx.beginPath();
-              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(20,0,40,0.9)";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
-              ctx.strokeStyle = "rgba(220,220,240,1)";
-              ctx.lineWidth = 3;
-              ctx.stroke();
-
-              const toothScale = effect.currentSize / BIG_SIZE;
-              for (let b = 0; b < effect.currentTeeth; b++) {
-                const toothAngle = (Math.PI * 2 * b) / effect.currentTeeth;
-                const toothStartX = Math.cos(toothAngle) * (effect.currentSize - 5 * toothScale);
-                const toothStartY = Math.sin(toothAngle) * (effect.currentSize - 5 * toothScale);
-                const toothTipX = Math.cos(toothAngle) * (effect.currentSize + 30 * toothScale);
-                const toothTipY = Math.sin(toothAngle) * (effect.currentSize + 30 * toothScale);
-                const perpAngle = toothAngle + Math.PI / 2;
-                const perpX = Math.cos(perpAngle) * 18 * toothScale;
-                const perpY = Math.sin(perpAngle) * 18 * toothScale;
-
-                ctx.beginPath();
-                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
-                ctx.lineTo(toothTipX, toothTipY);
-                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
-                ctx.closePath();
-                ctx.fillStyle = "rgba(240,240,255,1)";
-                ctx.fill();
-              }
-
-              ctx.beginPath();
-              ctx.arc(0, 0, Math.max(1, effect.currentSize * 0.35), 0, Math.PI * 2);
-              ctx.fillStyle = "#ff00ff";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, Math.max(0.5, effect.currentSize * 0.18), 0, Math.PI * 2);
-              ctx.fillStyle = "#ffffff";
-              ctx.fill();
-              ctx.restore();
-
-              if (Math.random() < 0.5) {
-                effects.push({
-                  type: "spark",
-                  x: effect.x + random(-10, 10),
-                  y: effect.y + random(-10, 10),
-                  team: effect.sourceTeam,
-                  life: 15, maxLife: 15,
-                });
-              }
+              drawSawBlade(effect.x, effect.y, SMALL_SIZE, effect.bladeAngle);
 
               if (p >= 1) {
                 effect.phase = "growing";
                 effect.stageTimer = 0;
-                playLaserCharge(effect.sourceTeam, 0.5, 0.4);
               }
               continue;
             }
@@ -1989,87 +2374,21 @@
             if (effect.phase === "growing") {
               const p = Math.min(1, st / effect.growDuration);
               effect.bladeAngle = (effect.bladeAngle || 0) + 0.7;
-
               effect.currentSize = SMALL_SIZE + (BIG_SIZE - SMALL_SIZE) * p;
-              effect.currentTeeth = 10;
 
-              ctx.save();
-              ctx.translate(effect.x, effect.y);
-              ctx.rotate(effect.bladeAngle);
-              ctx.shadowColor = "#ff00ff";
-              ctx.shadowBlur = 25 + p * 25;
-
-              ctx.beginPath();
-              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(20,0,40,0.9)";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, effect.currentSize, 0, Math.PI * 2);
-              ctx.strokeStyle = "rgba(220,220,240,1)";
-              ctx.lineWidth = 3 + p * 7;
-              ctx.stroke();
-
-              const toothScale = effect.currentSize / BIG_SIZE;
-              for (let b = 0; b < effect.currentTeeth; b++) {
-                const toothAngle = (Math.PI * 2 * b) / effect.currentTeeth;
-                const toothStartX = Math.cos(toothAngle) * (effect.currentSize - 5 * toothScale);
-                const toothStartY = Math.sin(toothAngle) * (effect.currentSize - 5 * toothScale);
-                const toothTipX = Math.cos(toothAngle) * (effect.currentSize + 30 * toothScale);
-                const toothTipY = Math.sin(toothAngle) * (effect.currentSize + 30 * toothScale);
-                const perpAngle = toothAngle + Math.PI / 2;
-                const perpX = Math.cos(perpAngle) * 18 * toothScale;
-                const perpY = Math.sin(perpAngle) * 18 * toothScale;
-
-                ctx.beginPath();
-                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
-                ctx.lineTo(toothTipX, toothTipY);
-                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
-                ctx.closePath();
-                const toothGrad = ctx.createLinearGradient(
-                  toothStartX, toothStartY, toothTipX, toothTipY);
-                toothGrad.addColorStop(0, "rgba(240,240,255,1)");
-                toothGrad.addColorStop(1, "rgba(180,180,220,0.9)");
-                ctx.fillStyle = toothGrad;
-                ctx.fill();
-                ctx.strokeStyle = "rgba(255,255,255,0.9)";
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-              }
-
-              ctx.beginPath();
-              ctx.arc(0, 0, Math.max(1, effect.currentSize * 0.35), 0, Math.PI * 2);
-              ctx.fillStyle = "#ff00ff";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, Math.max(0.5, effect.currentSize * 0.18), 0, Math.PI * 2);
-              ctx.fillStyle = "#ffffff";
-              ctx.fill();
-              ctx.restore();
-
-              ctx.save();
-              ctx.globalAlpha = (1 - p) * 0.7;
-              ctx.beginPath();
-              ctx.arc(effect.x, effect.y, effect.currentSize + 20 + p * 40, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(255,0,255,${1 - p})`;
-              ctx.lineWidth = 5;
-              ctx.stroke();
-              ctx.restore();
+              drawSawBlade(effect.x, effect.y, effect.currentSize, effect.bladeAngle);
 
               if (p >= 1) {
                 effect.phase = "active";
                 effect.stageTimer = 0;
-                playThunderBoom(effect.sourceTeam, 0.45, 0);
               }
               continue;
             }
 
             if (effect.phase === "active") {
-              const sawSize = BIG_SIZE;
-              const teethCount = 10;
               const zoneR = effect.zoneRadius || 220;
               const tickEvery = effect.tickEvery || 10;
-              const dmgPerTick = effect.damagePerTick || 15;
-
+              const dmgPerTick = effect.damagePerTick || 12;
               effect.bladeAngle = (effect.bladeAngle || 0) + 0.4;
 
               ctx.save();
@@ -2084,59 +2403,7 @@
               ctx.fill();
               ctx.restore();
 
-              ctx.save();
-              ctx.translate(effect.x, effect.y);
-              ctx.rotate(effect.bladeAngle);
-              ctx.shadowColor = "#ff00ff";
-              ctx.shadowBlur = 40;
-
-              ctx.beginPath();
-              ctx.arc(0, 0, sawSize, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(20,0,40,0.9)";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, sawSize, 0, Math.PI * 2);
-              ctx.strokeStyle = "rgba(220,220,240,1)";
-              ctx.lineWidth = 10;
-              ctx.stroke();
-
-              for (let b = 0; b < teethCount; b++) {
-                const toothAngle = (Math.PI * 2 * b) / teethCount;
-                const toothStartX = Math.cos(toothAngle) * (sawSize - 5);
-                const toothStartY = Math.sin(toothAngle) * (sawSize - 5);
-                const toothTipX = Math.cos(toothAngle) * (sawSize + 30);
-                const toothTipY = Math.sin(toothAngle) * (sawSize + 30);
-                const perpAngle = toothAngle + Math.PI / 2;
-                const perpX = Math.cos(perpAngle) * 18;
-                const perpY = Math.sin(perpAngle) * 18;
-
-                ctx.beginPath();
-                ctx.moveTo(toothStartX - perpX, toothStartY - perpY);
-                ctx.lineTo(toothTipX, toothTipY);
-                ctx.lineTo(toothStartX + perpX, toothStartY + perpY);
-                ctx.closePath();
-                const toothGrad = ctx.createLinearGradient(
-                  toothStartX, toothStartY, toothTipX, toothTipY);
-                toothGrad.addColorStop(0, "rgba(240,240,255,1)");
-                toothGrad.addColorStop(1, "rgba(180,180,220,0.9)");
-                ctx.fillStyle = toothGrad;
-                ctx.fill();
-                ctx.strokeStyle = "rgba(255,255,255,0.9)";
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-              }
-
-              ctx.shadowColor = "#ff00ff";
-              ctx.shadowBlur = 30;
-              ctx.beginPath();
-              ctx.arc(0, 0, 30, 0, Math.PI * 2);
-              ctx.fillStyle = "#ff00ff";
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(0, 0, 15, 0, Math.PI * 2);
-              ctx.fillStyle = "#ffffff";
-              ctx.fill();
-              ctx.restore();
+              drawSawBlade(effect.x, effect.y, BIG_SIZE, effect.bladeAngle, "#f0f0ff", "#ff00ff", 14);
 
               if (st % tickEvery === 0) {
                 for (const p of players) {
@@ -2147,17 +2414,22 @@
                     p.hp -= dmgPerTick;
                     createExplosion(p.x, p.y, p.team);
                     createDamageNumber(p.x, p.y, dmgPerTick);
-                    effects.push({
-                      type: "bladeCut",
-                      x: p.x, y: p.y,
-                      team: p.team,
-                      life: 40, maxLife: 40,
-                    });
                     playMeteorImpact(p.team, 0.4);
                     if (p.hp <= 0) {
                       createKillEffect(p);
                       playKillSound(panForTeamRandom(p.team));
                       rewardSenderForGiftKill(effect.senderId, 25);
+                    }
+                  }
+                }
+
+                if (effect.senderId) {
+                  const sender = players.find(
+                    sp => sp.id === effect.senderId && sp.hp > 0);
+                  if (sender) {
+                    const healed = sender.heal(8);
+                    if (healed > 0) {
+                      createHealNumber(sender.x, sender.y, healed);
                     }
                   }
                 }
@@ -2171,54 +2443,9 @@
                   team: effect.team,
                   life: 70, maxLife: 70,
                 });
-                for (let k = 0; k < 15; k++) {
-                  const a = (Math.PI * 2 * k) / 15;
-                  effects.push({
-                    type: "bladeShard",
-                    x: effect.x, y: effect.y,
-                    vx: Math.cos(a) * random(6, 14),
-                    vy: Math.sin(a) * random(6, 14),
-                    angle: a,
-                    team: effect.team,
-                    life: 80, maxLife: 80,
-                  });
-                }
                 playLaserFire(effect.sourceTeam, 0.5);
               }
             }
-          }
-
-          if (effect.type === "bladeCut") {
-            const alpha = 1 - progress;
-            if (alpha < 0.05) continue;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.translate(effect.x, effect.y);
-            ctx.strokeStyle = "#ff0044";
-            ctx.lineWidth = 10;
-            ctx.lineCap = "round";
-            ctx.shadowColor = "#ff0044";
-            ctx.shadowBlur = 25;
-            ctx.beginPath();
-            ctx.moveTo(-50, -50);
-            ctx.lineTo(50, 50);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(50, -50);
-            ctx.lineTo(-50, 50);
-            ctx.stroke();
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 4;
-            ctx.shadowBlur = 15;
-            ctx.beginPath();
-            ctx.moveTo(-50, -50);
-            ctx.lineTo(50, 50);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(50, -50);
-            ctx.lineTo(-50, 50);
-            ctx.stroke();
-            ctx.restore();
           }
 
           if (effect.type === "bladeBurst") {
@@ -2239,38 +2466,9 @@
             }
           }
 
-          if (effect.type === "bladeShard") {
-            effect.x += effect.vx;
-            effect.y += effect.vy;
-            effect.vx *= 0.96;
-            effect.vy *= 0.96;
-            const alpha = 1 - progress;
-            if (alpha < 0.05) continue;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.translate(effect.x, effect.y);
-            ctx.rotate(effect.angle + progress * 4);
-            ctx.beginPath();
-            ctx.moveTo(20, 0);
-            ctx.lineTo(-8, -5);
-            ctx.lineTo(-8, 5);
-            ctx.closePath();
-            const grad = ctx.createLinearGradient(-8, -5, 20, 5);
-            grad.addColorStop(0, "rgba(200,200,220,0.9)");
-            grad.addColorStop(0.5, "rgba(255,255,255,1)");
-            grad.addColorStop(1, "rgba(180,60,255,0.9)");
-            ctx.fillStyle = grad;
-            ctx.fill();
-            ctx.strokeStyle = "rgba(255,220,255,0.9)";
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            ctx.restore();
-          }
-
           if (effect.type === "meteor") {
             const p = progress;
-            const startX = effect.startX;
-            const startY = effect.startY;
+            const startX = effect.startX, startY = effect.startY;
             const curX = startX + (effect.targetX - startX) * p;
             const curY = startY + (effect.targetY - startY) * p;
 
@@ -2281,14 +2479,9 @@
               const ty = startY + (effect.targetY - startY) * tp;
               const alpha = (1 - k / 20) * (1 - p * 0.3);
               const size = 45 - k * 2;
-
               ctx.beginPath();
               ctx.arc(tx, ty, size, 0, Math.PI * 2);
               ctx.fillStyle = `rgba(255,80,0,${alpha * 0.5})`;
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(tx, ty, size * 0.6, 0, Math.PI * 2);
-              ctx.fillStyle = `rgba(255,180,80,${alpha * 0.7})`;
               ctx.fill();
             }
             ctx.restore();
@@ -2300,47 +2493,33 @@
             ctx.beginPath();
             ctx.arc(curX, curY, 50, 0, Math.PI * 2);
             ctx.fill();
-
-            ctx.shadowColor = "#ffffff";
-            ctx.shadowBlur = 30;
-            ctx.fillStyle = "#ffeeaa";
-            ctx.beginPath();
-            ctx.arc(curX, curY, 25, 0, Math.PI * 2);
-            ctx.fill();
             ctx.restore();
 
             if (progress >= 0.95 && !effect.exploded) {
               effect.exploded = true;
-
               const impactX = effect.targetX;
               const impactY = effect.targetY;
-
               const target = effect.targetRef;
               if (target && target.hp > 0) {
                 const DMG = effect.damage || 15;
                 target.hp -= DMG;
                 createDamageNumber(target.x, target.y, DMG);
-
                 if (target.hp <= 0) {
                   createKillEffect(target);
                   playKillSound(panForTeamRandom(target.team));
                   rewardSenderForGiftKill(effect.senderId, 25);
                 }
               }
-
               const splashR = effect.splashRadius || 180;
               const splashDmg = effect.splashDamage || 8;
-              const enemyTeam = effect.team;
-
               for (const p of players) {
-                if (p.team !== enemyTeam) continue;
+                if (p.team !== effect.team) continue;
                 if (p === target) continue;
                 if (p.hp <= 0) continue;
                 const d = Math.hypot(p.x - impactX, p.y - impactY);
                 if (d <= splashR) {
                   p.hp -= splashDmg;
                   createDamageNumber(p.x, p.y, splashDmg);
-
                   if (p.hp <= 0) {
                     createKillEffect(p);
                     playKillSound(panForTeamRandom(p.team));
@@ -2348,15 +2527,12 @@
                   }
                 }
               }
-
               createExplosion(impactX, impactY, effect.team);
               screenShake = Math.max(screenShake, 30);
-
               if (effect.senderId) {
                 const sender = players.find((p) => p.id === effect.senderId && p.hp > 0);
-                if (sender) sender.heal(15);
+                if (sender) sender.heal(10);
               }
-
               effects.push({
                 type: "meteorImpact",
                 x: impactX, y: impactY,
@@ -2371,16 +2547,6 @@
           if (effect.type === "meteorImpact") {
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
-
-            if (progress < 0.6) {
-              const sr = progress * (effect.splashRadius || 180);
-              ctx.beginPath();
-              ctx.arc(effect.x, effect.y, sr, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(255,200,120,${alpha * 0.5})`;
-              ctx.lineWidth = 8 * (1 - progress) + 2;
-              ctx.stroke();
-            }
-
             for (let ring = 0; ring < 3; ring++) {
               const rp = Math.max(0, progress - ring * 0.12);
               const r = rp * (250 + ring * 80);
@@ -2393,17 +2559,6 @@
                   : `rgba(200,60,0,${alpha * 0.6})`;
               ctx.lineWidth = 15 * (1 - rp) + 3;
               ctx.stroke();
-            }
-            if (progress < 0.3) {
-              const grad = ctx.createRadialGradient(
-                effect.x, effect.y, 0, effect.x, effect.y, 150);
-              grad.addColorStop(0, `rgba(255,255,255,${1 - progress * 3})`);
-              grad.addColorStop(0.5, `rgba(255,180,80,${(1 - progress * 3) * 0.7})`);
-              grad.addColorStop(1, "rgba(255,60,0,0)");
-              ctx.fillStyle = grad;
-              ctx.beginPath();
-              ctx.arc(effect.x, effect.y, 150, 0, Math.PI * 2);
-              ctx.fill();
             }
           }
 
@@ -2422,12 +2577,6 @@
             const spin = Date.now() * 0.004;
             const maxR = effect.maxRadius || GAME_HEIGHT * 0.5;
             ctx.save();
-            const enemyLeft = effect.x - maxR;
-            const enemyRight = effect.x + maxR;
-            ctx.beginPath();
-            ctx.rect(enemyLeft, 0, enemyRight - enemyLeft, GAME_HEIGHT);
-            ctx.clip();
-            ctx.globalAlpha = alpha;
             for (let arm = 0; arm < 5; arm++) {
               const armOffset = (Math.PI * 2 * arm) / 5 + spin;
               ctx.beginPath();
@@ -2441,22 +2590,8 @@
               }
               ctx.strokeStyle = `rgba(180,80,255,${alpha * 0.7})`;
               ctx.lineWidth = 14;
-              ctx.lineCap = "round";
-              ctx.stroke();
-              ctx.strokeStyle = `rgba(255,180,255,${alpha * 0.9})`;
-              ctx.lineWidth = 4;
               ctx.stroke();
             }
-            const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.2;
-            const grad = ctx.createRadialGradient(
-              effect.x, effect.y, 0, effect.x, effect.y, 150 * pulse);
-            grad.addColorStop(0, `rgba(255,180,255,${alpha})`);
-            grad.addColorStop(0.4, `rgba(180,60,255,${alpha * 0.8})`);
-            grad.addColorStop(1, `rgba(60,0,120,0)`);
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(effect.x, effect.y, 150 * pulse, 0, Math.PI * 2);
-            ctx.fill();
             ctx.restore();
           }
 
@@ -2464,93 +2599,28 @@
             const player = effect.playerRef;
             if (!player || player.hp <= 0) continue;
 
+            const maxFrames = effect.pullFrames + effect.holdFrames + 60;
             const totalElapsed = effect.maxLife - effect.life;
-            let progressInPull;
-            let holdPhase = false;
+            if (totalElapsed > maxFrames) {
+              effect.life = 0;
+              continue;
+            }
 
+            let progressInPull;
             if (totalElapsed < effect.pullFrames) {
               progressInPull = totalElapsed / effect.pullFrames;
-            } else if (totalElapsed < effect.pullFrames + effect.holdFrames) {
-              progressInPull = 1;
-              holdPhase = true;
             } else {
               progressInPull = 1;
-              holdPhase = true;
             }
 
             const spinAngle = effect.startAngle +
                               progressInPull * 12 * Math.PI * effect.spinSpeed * effect.spinDirection;
-
             const easedProgress = 1 - Math.pow(1 - progressInPull, 2);
             const radius = effect.startRadius * (1 - easedProgress);
-
-            const wobble = holdPhase ? Math.sin(Date.now() * 0.02 + effect.startAngle * 10) * 8 : 0;
-
-            const px = effect.centerX + Math.cos(spinAngle) * radius + wobble;
-            const py = effect.centerY + Math.sin(spinAngle) * radius + wobble;
-
+            const px = effect.centerX + Math.cos(spinAngle) * radius;
+            const py = effect.centerY + Math.sin(spinAngle) * radius;
             player.x = px;
             player.y = py;
-
-            ctx.save();
-            for (let t = 1; t <= 4; t++) {
-              const tP = Math.max(0, progressInPull - t * 0.04);
-              const tAngle = effect.startAngle +
-                             tP * 12 * Math.PI * effect.spinSpeed * effect.spinDirection;
-              const tEasedProgress = 1 - Math.pow(1 - tP, 2);
-              const tRadius = effect.startRadius * (1 - tEasedProgress);
-              const tx = effect.centerX + Math.cos(tAngle) * tRadius;
-              const ty = effect.centerY + Math.sin(tAngle) * tRadius;
-
-              ctx.globalAlpha = 0.25 - t * 0.05;
-              ctx.beginPath();
-              ctx.arc(tx, ty, player.radius * (0.85 - t * 0.1), 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(180,80,255,1)";
-              ctx.fill();
-            }
-            ctx.restore();
-
-            ctx.save();
-            ctx.translate(px, py);
-            const rotationSpeed = holdPhase ? 0.15 : 0.35;
-            ctx.rotate(progressInPull * rotationSpeed * effect.spinDirection * 20);
-
-            const auraR = player.radius + 10 + Math.sin(Date.now() * 0.02) * 3;
-            ctx.beginPath();
-            ctx.arc(0, 0, auraR, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(200,80,255,${0.6 + Math.sin(Date.now() * 0.03) * 0.3})`;
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
-            ctx.clip();
-            if (player.img.complete) {
-              try {
-                ctx.drawImage(player.img, -player.radius, -player.radius,
-                              player.radius * 2, player.radius * 2);
-              } catch (e) {
-                ctx.fillStyle = "#777";
-                ctx.fillRect(-player.radius, -player.radius,
-                             player.radius * 2, player.radius * 2);
-              }
-            }
-            ctx.restore();
-
-            if (holdPhase) {
-              ctx.save();
-              ctx.globalAlpha = 0.5 + Math.random() * 0.3;
-              ctx.strokeStyle = "#cc66ff";
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.moveTo(px, py);
-              const midX = (px + effect.centerX) / 2 + (Math.random() - 0.5) * 30;
-              const midY = (py + effect.centerY) / 2 + (Math.random() - 0.5) * 30;
-              ctx.lineTo(midX, midY);
-              ctx.lineTo(effect.centerX, effect.centerY);
-              ctx.stroke();
-              ctx.restore();
-            }
           }
 
           if (effect.type === "wipeExplosion") {
@@ -2576,94 +2646,6 @@
             }
           }
 
-          if (effect.type === "bgCrack") {
-            const alpha = Math.min(1, effect.life / 30) * (1 - progress * 0.3);
-            if (alpha < 0.05) continue;
-            ctx.save();
-            if (effect.boundsLeft !== undefined && effect.boundsRight !== undefined) {
-              ctx.beginPath();
-              ctx.rect(effect.boundsLeft, 0,
-                       effect.boundsRight - effect.boundsLeft, GAME_HEIGHT);
-              ctx.clip();
-            }
-            ctx.globalAlpha = alpha;
-            ctx.lineCap = "round";
-            ctx.strokeStyle = `rgba(0,0,0,${alpha * 0.9})`;
-            ctx.lineWidth = 12;
-            ctx.beginPath();
-            let cx = effect.x, cy = effect.y;
-            ctx.moveTo(cx, cy);
-            const segments = 12;
-            const segLen = effect.length / segments;
-            for (let k = 0; k < segments; k++) {
-              const angle = effect.angle + (Math.random() - 0.5) * 0.5;
-              cx += Math.cos(angle) * segLen;
-              cy += Math.sin(angle) * segLen;
-              ctx.lineTo(cx, cy);
-            }
-            ctx.stroke();
-            ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.8})`;
-            ctx.lineWidth = 3;
-            ctx.stroke();
-            ctx.restore();
-          }
-
-          if (effect.type === "glassShard") {
-            effect.x += effect.vx;
-            effect.y += effect.vy;
-            effect.vx *= 0.97;
-            effect.vy *= 0.97;
-            effect.angle += effect.spin;
-            const alpha = 1 - progress;
-            if (alpha < 0.05) continue;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.translate(effect.x, effect.y);
-            ctx.rotate(effect.angle);
-            ctx.beginPath();
-            ctx.moveTo(0, -effect.size * 0.5);
-            ctx.lineTo(effect.size * 0.4, effect.size * 0.3);
-            ctx.lineTo(-effect.size * 0.4, effect.size * 0.3);
-            ctx.closePath();
-            const grad = ctx.createLinearGradient(
-              -effect.size * 0.4, -effect.size * 0.5,
-              effect.size * 0.4, effect.size * 0.3);
-            grad.addColorStop(0, `rgba(200,220,255,${alpha})`);
-            grad.addColorStop(0.5, `rgba(140,180,255,${alpha * 0.8})`);
-            grad.addColorStop(1, `rgba(80,120,200,${alpha * 0.6})`);
-            ctx.fillStyle = grad;
-            ctx.fill();
-            ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.9})`;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.restore();
-          }
-
-          if (effect.type === "floatingSkull") {
-            const alpha = Math.min(1, effect.life / 40) * 0.5;
-            if (alpha < 0.05) continue;
-            const y = effect.y - (effect.y - effect.targetY) * progress;
-            const x = effect.x + effect.drift * progress * 100 +
-                      Math.sin(Date.now() * 0.002 + effect.x) * 15;
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.textAlign = "center";
-            ctx.font = "36px Arial";
-            ctx.fillStyle = "#dddddd";
-            ctx.fillText("💀", x, y);
-            ctx.restore();
-          }
-
-          if (effect.type === "finalDarkness" &&
-              effect.left !== undefined && effect.right !== undefined) {
-            const alpha = Math.min(1, (effect.maxLife - effect.life) / 30) *
-                          Math.min(1, effect.life / 40) * 0.8;
-            if (alpha < 0.05) continue;
-            const w = effect.right - effect.left;
-            ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-            ctx.fillRect(effect.left, 0, w, GAME_HEIGHT);
-          }
-
           if (effect.type === "wipeShockwave") {
             const alpha = 1 - progress;
             if (alpha < 0.05) continue;
@@ -2672,32 +2654,11 @@
             ctx.beginPath();
             ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
             ctx.strokeStyle = effect.team === "A"
-              ? `rgba(255,48,79,${alpha})`
-              : `rgba(0,217,255,${alpha})`;
+              ? `rgba(120,200,255,${alpha})`
+              : `rgba(120,255,150,${alpha})`;
             ctx.lineWidth = 25 * (1 - progress) + 4;
             ctx.stroke();
           }
-        }
-
-        if (bannerLife > 0) {
-          bannerLife--;
-          const p = 1 - bannerLife / bannerMaxLife;
-          let alpha;
-          if (p < 0.15) alpha = p / 0.15;
-          else if (p > 0.75) alpha = (1 - p) / 0.25;
-          else alpha = 1;
-          const scale = 1 + Math.sin(p * Math.PI) * 0.15;
-          const y = GAME_HEIGHT * 0.4;
-          ctx.save();
-          ctx.globalAlpha = alpha;
-          ctx.textAlign = "center";
-          ctx.font = `bold ${Math.floor(90 * scale)}px Arial`;
-          ctx.fillStyle = bannerTeam === "A" ? "#ff5a76" : "#3ee6ff";
-          ctx.fillText(bannerText, GAME_WIDTH / 2, y);
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 4;
-          ctx.strokeText(bannerText, GAME_WIDTH / 2, y);
-          ctx.restore();
         }
       }
 
@@ -2706,14 +2667,12 @@
         const sender = players.find((p) => p.id === senderId && p.hp > 0);
         if (!sender) return;
         sender.kills++;
-        sender.radius = Math.min(70, 55 + sender.kills * 2);
+        sender.radius = Math.min(62, 50 + sender.kills * 1.8);
         sender.maxHp = Math.min(
           MAX_HP_CAP,
           Math.max(sender.maxHp, START_HP + sender.kills * 15)
         );
         sender.hp = Math.min(sender.maxHp, sender.hp + amount);
-        sender.damage = 1;
-        sender.bulletSize = Math.min(10, 5 + sender.kills * 0.25);
         logDebug(`GIFT KILL reward → ${sender.username} (+${amount} HP)`);
       }
 
@@ -2723,8 +2682,9 @@
       function giftAttack(coins, senderTeam, giftName, senderId) {
         const enemyTeam = senderTeam === "A" ? "B" : "A";
         const targets = players.filter((p) => p.team === enemyTeam && p.hp > 0);
-        if (targets.length === 0) return;
         const name = (giftName || "").toLowerCase();
+
+        logDebug(`giftAttack coins=${coins} name="${giftName}" sender=${senderId} targets=${targets.length}`);
 
         let launchIcon = "✨";
         if (name.includes("rose")) launchIcon = "🌹";
@@ -2732,103 +2692,122 @@
         else if (name.includes("mind")) launchIcon = "🧠";
         else if (name.includes("ghost")) launchIcon = "👻";
         else if (name.includes("lightning")) launchIcon = "⚡";
+        else if (coins >= 10 && coins < 50) launchIcon = "💥";
         else if (coins >= 100 && coins < 500) launchIcon = "🪚";
         else if (coins >= 500 && coins < 1000) launchIcon = "☄️";
         else if (coins >= 1000) launchIcon = "💀";
 
         spawnGiftLaunch(senderId, senderTeam, launchIcon);
 
-        // ---------- Rose gift (name contains "rose") ----------
+        if (targets.length === 0) {
+          logDebug("NO TARGETS — gift fired with no banner");
+          playRoseSound(senderTeam);
+          return;
+        }
+
         if (name.includes("rose")) {
           playRoseSound(senderTeam);
           const lockedTarget = targets[Math.floor(Math.random() * targets.length)];
           fireRoseVolley(senderTeam, senderId, lockedTarget);
-          bannerText = "🌹 ROSE ATTACK!";
-          bannerTeam = senderTeam;
-          bannerLife = bannerMaxLife;
           return;
         }
 
-        // ---------- Heart Me ----------
         if (name.includes("heart me") || name.includes("heartme")) {
           playHeartSound(senderTeam);
-          // Assign each heart a different enemy via round-robin (repeats allowed)
           const shuffled = [...targets].sort(() => Math.random() - 0.5);
           fireHeartVolley(senderTeam, senderId, shuffled);
-          bannerText = "💗 HEART ATTACK!";
-          bannerTeam = senderTeam;
-          bannerLife = bannerMaxLife;
           return;
         }
 
         if (name.includes("mind blown") || name.includes("mindblown")) {
           playMindSound(senderTeam);
 
-          const HIT_COUNT = Math.min(8, targets.length);
+          const origin = getSenderOrigin(senderId, senderTeam);
+
+          effects.push({
+            type: "mindCharge",
+            x: origin.x, y: origin.y,
+            team: senderTeam,
+            life: 15, maxLife: 15,
+          });
+
+          const WAVES = 3;
+          const BEAMS_PER_WAVE = 3;
+          const WAVE_DELAY = 400;
+
           const shuffled = [...targets].sort(() => Math.random() - 0.5);
-          const hitList = shuffled.slice(0, HIT_COUNT);
 
-          const enemyCenterX = enemyTeam === "A"
-            ? GAME_WIDTH * 0.25 : GAME_WIDTH * 0.75;
+          for (let wave = 0; wave < WAVES; wave++) {
+            setTimeout(() => {
+              const enemyTeamNow = senderTeam === "A" ? "B" : "A";
+              const alive = players.filter(p => p.team === enemyTeamNow && p.hp > 0);
 
-          for (let i = 0; i < 3; i++) {
-            effects.push({
-              type: "brainwave",
-              x: enemyCenterX, y: GAME_HEIGHT / 2,
-              team: enemyTeam,
-              life: 70 + i * 10, maxLife: 70 + i * 10,
-              delay: i * 8,
-            });
+              const pickStart = wave * BEAMS_PER_WAVE;
+              const waveTargets = [];
+              for (let bi = 0; bi < BEAMS_PER_WAVE; bi++) {
+                let t = shuffled[(pickStart + bi) % shuffled.length];
+                if (!t || t.hp <= 0) {
+                  if (alive.length) t = alive[Math.floor(Math.random() * alive.length)];
+                  else t = null;
+                }
+                if (t && !waveTargets.includes(t)) waveTargets.push(t);
+              }
+
+              waveTargets.forEach((target) => {
+                if (!target || target.hp <= 0) return;
+
+                effects.push({
+                  type: "mindLaser",
+                  startX: origin.x,
+                  startY: origin.y,
+                  endX: target.x,
+                  endY: target.y,
+                  team: senderTeam,
+                  life: 22, maxLife: 22,
+                });
+
+                playLaserFire(senderTeam, 0.4);
+
+                const DMG = 6;
+                target.hp -= DMG;
+                createDamageNumber(target.x, target.y, DMG);
+
+                if (senderId) {
+                  const sender = players.find(p => p.id === senderId && p.hp > 0);
+                  if (sender) {
+                    const healed = sender.heal(3);
+                    if (healed > 0) createHealNumber(sender.x, sender.y, healed);
+                  }
+                }
+
+                effects.push({
+                  type: "mindImpact",
+                  x: target.x, y: target.y,
+                  team: target.team,
+                  life: 40, maxLife: 40,
+                });
+
+                if (target.hp <= 0) {
+                  createKillEffect(target);
+                  playKillSound(panForTeamRandom(target.team));
+                  rewardSenderForGiftKill(senderId, 25);
+                }
+              });
+            }, 250 + wave * WAVE_DELAY);
           }
 
-          hitList.forEach((target, idx) => {
-            const DMG = 8;
-            target.hp -= DMG;
-            createDamageNumber(target.x, target.y, DMG);
-
-            if (senderId) {
-              const sender = players.find((p) => p.id === senderId && p.hp > 0);
-              if (sender) sender.heal(3);
-            }
-
-            effects.push({
-              type: "brainExplode",
-              x: target.x, y: target.y,
-              team: target.team,
-              life: 60, maxLife: 60,
-              delay: idx * 4,
-            });
-            for (let k = 0; k < 2; k++) {
-              const a = Math.random() * Math.PI * 2;
-              effects.push({
-                type: "emojiParticle",
-                x: target.x, y: target.y,
-                vx: Math.cos(a) * random(3, 6),
-                vy: Math.sin(a) * random(3, 6),
-                emoji: Math.random() < 0.5 ? "🤯" : "💥",
-                life: 60, maxLife: 60,
-              });
-            }
-            if (target.hp <= 0) {
-              createKillEffect(target);
-              playKillSound(panForTeamRandom(target.team));
-              rewardSenderForGiftKill(senderId, 25);
-            }
-          });
           return;
         }
 
         if (name.includes("ghost")) {
           playGhostAmbience(senderTeam, 0.35, 3);
           playGhostWail(senderTeam, 0.35, 0.1);
-
           const HOP_COUNT = 8;
           const shuffled = [...targets].sort(() => Math.random() - 0.5);
           const huntList = [];
           for (let i = 0; i < HOP_COUNT; i++) {
             huntList.push(shuffled[i % shuffled.length]);
           }
-
           const sender = players.find(p => p.id === senderId && p.hp > 0);
           const origin = getSenderOrigin(senderId, senderTeam);
 
@@ -2843,13 +2822,10 @@
             phase: "emerging",
             stageTimer: 0,
             emergeDuration: 35,
-            emergeProgress: 0,
             senderRef: sender,
             life: 700, maxLife: 700,
             trail: [],
             senderId,
-            hopCount: HOP_COUNT,
-            hitsDone: 0,
           });
 
           setTimeout(() => playGhostScream(senderTeam, 0.35),
@@ -2857,7 +2833,7 @@
           return;
         }
 
-        if (name.includes("lightning") || coins === 50) {
+        if (name.includes("lightning") || (coins >= 50 && coins < 100)) {
           playLightningCrack(senderTeam, 0.6);
           setTimeout(() => playThunderRumble(senderTeam, 0.5, 0), 200);
           setTimeout(() => playThunderBoom(senderTeam, 0.4, 0), 400);
@@ -2880,32 +2856,37 @@
 
           chainList.forEach((target, idx) => {
             setTimeout(() => {
-              if (target.hp > 0) {
-                const DMG = 18;
+              if (target.hp <= 0) return;
+
+              effects.push({
+                type: "chainHit",
+                x: target.x, y: target.y,
+                team: target.team,
+                life: 60, maxLife: 60,
+              });
+
+              setTimeout(() => {
+                if (target.hp <= 0) return;
+
+                const DMG = 12;
                 target.hp -= DMG;
                 createDamageNumber(target.x, target.y, DMG);
 
                 if (senderId) {
                   const sender = players.find((p) => p.id === senderId && p.hp > 0);
-                  if (sender) sender.heal(6);
+                  if (sender) {
+                    const healed = sender.heal(5);
+                    if (healed > 0) createHealNumber(sender.x, sender.y, healed);
+                  }
                 }
-
-                effects.push({
-                  type: "chainHit",
-                  x: target.x, y: target.y,
-                  team: target.team,
-                  life: 60, maxLife: 60,
-                });
 
                 if (target.hp <= 0) {
                   createKillEffect(target);
                   playKillSound(panForTeamRandom(target.team));
                   rewardSenderForGiftKill(senderId, 25);
                 }
-              }
+              }, 120);
             }, 220 + idx * 220);
-            setTimeout(() => playLightningCrack(senderTeam, 0.3 + idx * 0.02),
-                       220 + idx * 220);
           });
 
           setTimeout(() => {
@@ -2915,49 +2896,43 @@
           return;
         }
 
-        /* ===== 1-4 coin gift -> ROSE VOLLEY (5 roses at ONE target) ===== */
         if (coins >= 1 && coins < 5) {
           playRoseSound(senderTeam);
           const lockedTarget = targets[Math.floor(Math.random() * targets.length)];
           fireRoseVolley(senderTeam, senderId, lockedTarget);
-          bannerText = "🌹 ROSE ATTACK!";
-          bannerTeam = senderTeam;
-          bannerLife = bannerMaxLife;
           return;
         }
 
-        /* ===== 5-9 coin gift -> ROCKET VOLLEY (existing behavior) ===== */
         if (coins >= 5 && coins < 10) {
-          playRoseSound(senderTeam);
+          playRocketLaunch(senderTeam);
           fireMissiles({
-            senderTeam, targets, count: 5, damage: 3, missileType: "rocket",
-            bannerText: "⚔ GIFT ATTACK!", bannerTeam: senderTeam, senderId,
+            senderTeam, targets, count: 5, damage: 4, missileType: "rocket",
+            senderId,
           });
           return;
         }
 
-        /* ===== MEGA STRIKE / DEATH SAW WITH EMERGE + FLY ===== */
+        if (coins >= 10 && coins < 50) {
+          playGrenadeLaunch(senderTeam);
+          fireGrenadeVolley(senderTeam, senderId, targets);
+          return;
+        }
+
         if (coins >= 100 && coins < 500) {
           playLaserCharge(senderTeam, 0.35, 0.6);
-
           const enemyLeft  = enemyTeam === "A" ? 0 : GAME_WIDTH / 2;
           const enemyRight = enemyTeam === "A" ? GAME_WIDTH / 2 : GAME_WIDTH;
-
           const ZONE_CENTER_X = (enemyLeft + enemyRight) / 2;
           const ZONE_CENTER_Y = GAME_HEIGHT / 2;
           const ZONE_RADIUS   = 220;
-
           const sender = players.find(p => p.id === senderId && p.hp > 0);
           const origin = getSenderOrigin(senderId, senderTeam);
 
           effects.push({
             type: "deathSawEmerge",
-            x: origin.x,
-            y: origin.y,
-            startX: origin.x,
-            startY: origin.y,
-            centerX: ZONE_CENTER_X,
-            centerY: ZONE_CENTER_Y,
+            x: origin.x, y: origin.y,
+            startX: origin.x, startY: origin.y,
+            centerX: ZONE_CENTER_X, centerY: ZONE_CENTER_Y,
             zoneRadius: ZONE_RADIUS,
             team: enemyTeam,
             sourceTeam: senderTeam,
@@ -2966,29 +2941,24 @@
             bladeAngle: 0,
             stageTimer: 0,
             phase: "emerging",
-            emergeDuration: 40,
-            flyDuration: 50,
-            growDuration: 30,
+            emergeDuration: 20,
+            flyDuration: 25,
+            growDuration: 15,
             currentSize: 0,
-            currentTeeth: 0,
-            growProgress: 0,
-            life: 320, maxLife: 320,
-            damagePerTick: 15,
+            life: 220, maxLife: 220,
+            damagePerTick: 12,
             tickEvery: 10,
             finished: false,
           });
 
           playSawSpin(senderTeam, 0.35, 3);
-          setTimeout(() => playThunderRumble(senderTeam, 0.4, 0), 300);
           return;
         }
 
         if (coins >= 500 && coins < 1000) {
           playNukeSound(senderTeam);
-
           const enemyLeft = enemyTeam === "A" ? 0 : GAME_WIDTH / 2;
           const enemyRight = enemyTeam === "A" ? GAME_WIDTH / 2 : GAME_WIDTH;
-
           const METEOR_COUNT = Math.min(10, targets.length);
           const shuffled = [...targets].sort(() => Math.random() - 0.5);
           const meteorTargets = shuffled.slice(0, METEOR_COUNT);
@@ -2996,14 +2966,11 @@
           meteorTargets.forEach((target, idx) => {
             setTimeout(() => {
               if (target.hp <= 0) return;
-
               const origin = getSenderOrigin(senderId, senderTeam);
-              const startY = origin.y - 200;
-
               effects.push({
                 type: "meteor",
                 startX: origin.x,
-                startY: startY,
+                startY: origin.y - 200,
                 targetX: target.x,
                 targetY: target.y,
                 team: target.team,
@@ -3016,7 +2983,6 @@
                 splashRadius: 180,
                 splashDamage: 8,
               });
-
               playMeteorWhoosh(target.team, 0.3);
             }, idx * 350);
           });
@@ -3031,13 +2997,27 @@
             });
             playThunderBoom(senderTeam, 0.5, 0);
           }, METEOR_COUNT * 350 + 1500);
-
           return;
         }
 
         if (coins >= 1000) {
+          if (senderId) {
+            const sender = players.find(p => p.id === senderId && p.hp > 0);
+            if (sender) {
+              sender.maxHp = MAX_HP_CAP;
+              sender.hp = MAX_HP_CAP;
+              sender.megaScale = 2.0;
+              sender.megaTimer = 420;
+              createHealNumber(sender.x, sender.y, MAX_HP_CAP);
+              logDebug(`TOTAL WIPE → ${sender.username} maxed to ${MAX_HP_CAP} HP + mega 2x`);
+            }
+          }
+
           players.forEach(p => {
-            if (p.team === senderTeam && p.hp > 0) p.heal(30);
+            if (p.team === senderTeam && p.hp > 0) {
+              const healed = p.heal(30);
+              if (healed > 0) createHealNumber(p.x, p.y, healed);
+            }
           });
 
           playApocalypseSiren(senderTeam, 0.35, 2.5);
@@ -3065,22 +3045,17 @@
             life: 400, maxLife: 400,
           });
 
-          setTimeout(() => playThunderRumble(senderTeam, 0.5, 0), 100);
-
           targets.forEach((target, idx) => {
             const dx = target.x - enemyCenterX;
             const dy = target.y - enemyCenterY;
-            const startAngle = Math.atan2(dy, dx);
-            const startRadius = Math.hypot(dx, dy);
-
             effects.push({
               type: "vortexPull",
               startX: target.x,
               startY: target.y,
               centerX: enemyCenterX,
               centerY: enemyCenterY,
-              startAngle: startAngle,
-              startRadius: startRadius,
+              startAngle: Math.atan2(dy, dx),
+              startRadius: Math.hypot(dx, dy),
               playerRef: target,
               team: target.team,
               pullFrames: 180,
@@ -3092,14 +3067,8 @@
             });
           });
 
-          setTimeout(() => playGhostWail(senderTeam, 0.5, 0), 300);
-          setTimeout(() => playGhostWail(senderTeam, 0.45, 0.5), 900);
-          setTimeout(() => playGhostWail(senderTeam, 0.4, 1.6), 1500);
-          setTimeout(() => playGhostScream(senderTeam, 0.5, 0), 2500);
-
           setTimeout(() => {
             playWipeBlast(senderTeam, 0.7);
-
             effects.push({
               type: "wipeExplosion",
               x: enemyCenterX, y: enemyCenterY,
@@ -3112,134 +3081,137 @@
               team: senderTeam,
               life: 90, maxLife: 90,
             });
-
             targets.forEach((target, idx) => {
               setTimeout(() => {
                 target.hp = 0;
                 createExplosion(target.x, target.y, target.team);
-                effects.push({
-                  type: "skullRise",
-                  x: target.x, y: target.y,
-                  team: target.team,
-                  life: 100, maxLife: 100,
-                });
-                for (let k = 0; k < 3; k++) {
-                  const a = Math.random() * Math.PI * 2;
-                  effects.push({
-                    type: "emojiParticle",
-                    x: target.x, y: target.y,
-                    vx: Math.cos(a) * random(4, 10),
-                    vy: Math.sin(a) * random(4, 10) - 3,
-                    emoji: Math.random() < 0.5 ? "💀" : "👻",
-                    life: 90, maxLife: 90,
-                  });
-                }
                 createKillEffect(target);
                 playKillSound(panForTeamRandom(target.team));
                 rewardSenderForGiftKill(senderId, 25);
               }, idx * 100);
             });
-
-            setTimeout(() => {
-              playWipeCrack(senderTeam, 0.55, 0);
-              playGlassCrack(senderTeam, 0.5);
-              setTimeout(() => playWipeCrack(senderTeam, 0.4, 0), 150);
-              setTimeout(() => playGlassCrack(senderTeam, 0.35), 300);
-              setTimeout(() => playWipeCrack(senderTeam, 0.3, 0), 500);
-
-              for (let i = 0; i < 10; i++) {
-                effects.push({
-                  type: "bgCrack",
-                  x: enemyCenterX, y: enemyCenterY,
-                  angle: (Math.PI * 2 * i) / 10 + Math.random() * 0.4,
-                  length: Math.max(enemyRight - enemyLeft, GAME_HEIGHT),
-                  team: enemyTeam,
-                  life: 200, maxLife: 200,
-                  delay: i * 2,
-                  seed: Math.random() * 1000,
-                  boundsLeft: enemyLeft,
-                  boundsRight: enemyRight,
-                });
-              }
-
-              for (let k = 0; k < 50; k++) {
-                const a = Math.random() * Math.PI * 2;
-                const r = Math.random() * 450;
-                effects.push({
-                  type: "glassShard",
-                  x: enemyCenterX + Math.cos(a) * r,
-                  y: enemyCenterY + Math.sin(a) * r,
-                  vx: Math.cos(a) * random(4, 16),
-                  vy: Math.sin(a) * random(4, 16),
-                  angle: Math.random() * Math.PI * 2,
-                  spin: (Math.random() - 0.5) * 0.4,
-                  size: random(20, 65),
-                  team: enemyTeam,
-                  life: 120, maxLife: 120,
-                });
-              }
-            }, 100);
-
-            setTimeout(() => {
-              for (let i = 0; i < 18; i++) {
-                effects.push({
-                  type: "floatingSkull",
-                  x: enemyLeft + random(50, enemyRight - enemyLeft - 50),
-                  y: GAME_HEIGHT + 50,
-                  targetY: random(200, GAME_HEIGHT - 200),
-                  team: enemyTeam,
-                  life: 150, maxLife: 150,
-                  delay: i * 4,
-                  drift: random(-1, 1),
-                });
-              }
-              effects.push({
-                type: "finalDarkness",
-                x: enemyCenterX, y: enemyCenterY,
-                left: enemyLeft, right: enemyRight,
-                team: enemyTeam,
-                life: 150, maxLife: 150,
-              });
-              playTornadoSound(senderTeam, 0.15, 2);
-            }, 1000);
           }, 4000);
-
           return;
         }
       }
 
       /* ============================================================
-         BACKGROUND
+         BACKGROUND — FULL ab.jpg + CENTER DIVIDER
       ============================================================ */
       function drawBackground() {
         const halfW = GAME_WIDTH / 2;
-        if (IMG_BG_A.complete && IMG_BG_A.naturalWidth > 0) {
-          ctx.drawImage(IMG_BG_A, 0, 0, halfW, GAME_HEIGHT);
+
+        if (IMG_BG.complete && IMG_BG.naturalWidth > 0) {
+          ctx.drawImage(IMG_BG, 0, 0, GAME_WIDTH, GAME_HEIGHT);
         } else {
-          ctx.fillStyle = FALLBACK_BG_A;
-          ctx.fillRect(0, 0, halfW, GAME_HEIGHT);
+          ctx.fillStyle = FALLBACK_BG;
+          ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
         }
-        if (IMG_BG_B.complete && IMG_BG_B.naturalWidth > 0) {
-          ctx.drawImage(IMG_BG_B, halfW, 0, halfW, GAME_HEIGHT);
-        } else {
-          ctx.fillStyle = FALLBACK_BG_B;
-          ctx.fillRect(halfW, 0, halfW, GAME_HEIGHT);
-        }
-        ctx.fillStyle = "rgba(255,255,255,0.2)";
-        ctx.fillRect(GAME_WIDTH / 2 - 3, 0, 6, GAME_HEIGHT);
-        ctx.fillStyle = "#222";
-        ctx.font = "bold 130px Arial";
+
+        ctx.fillStyle = "rgba(10,40,90,0.35)";
+        ctx.fillRect(0, 0, halfW, GAME_HEIGHT);
+
+        ctx.fillStyle = "rgba(0,40,10,0.35)";
+        ctx.fillRect(halfW, 0, halfW, GAME_HEIGHT);
+
+        const topGrad = ctx.createLinearGradient(0, 0, 0, 260);
+        topGrad.addColorStop(0, "rgba(0,0,0,0.65)");
+        topGrad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = topGrad;
+        ctx.fillRect(0, 0, GAME_WIDTH, 260);
+
+        const botGrad = ctx.createLinearGradient(0, GAME_HEIGHT - 260, 0, GAME_HEIGHT);
+        botGrad.addColorStop(0, "rgba(0,0,0,0)");
+        botGrad.addColorStop(1, "rgba(0,0,0,0.65)");
+        ctx.fillStyle = botGrad;
+        ctx.fillRect(0, GAME_HEIGHT - 260, GAME_WIDTH, 260);
+
+        ctx.save();
+        ctx.shadowColor = "rgba(255,255,255,0.9)";
+        ctx.shadowBlur = 25;
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillRect(GAME_WIDTH / 2 - 4, 0, 8, GAME_HEIGHT);
+        ctx.restore();
+
+        drawDiagonalName("MESSI",   GAME_WIDTH * 0.25, GAME_HEIGHT * 0.5,  Math.PI / 2.6, "left");
+        drawDiagonalName("RONALDO", GAME_WIDTH * 0.75, GAME_HEIGHT * 0.5, -Math.PI / 2.6, "right");
+
+        drawTeamBadge(GAME_WIDTH * 0.25, 90, "MESSI",   "#2b7bd6", "#ffffff", "#9fd4ff");
+        drawTeamBadge(GAME_WIDTH * 0.75, 90, "RONALDO", "#0f8a3c", "#d81f26", "#7dffa3");
+      }
+
+      function drawDiagonalName(text, cx, cy, angle, side) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+
+        const halfW = GAME_WIDTH / 2;
+        const maxTextWidth = halfW * 0.92;
+        let fontSize = 260;
         ctx.textAlign = "center";
-        ctx.fillText("A", GAME_WIDTH * 0.25, 150);
-        ctx.fillStyle = "#fff";
-        ctx.fillText("B", GAME_WIDTH * 0.75, 150);
-        const teamA = players.filter((p) => p.team === "A").length;
-        const teamB = players.filter((p) => p.team === "B").length;
-        ctx.font = "bold 35px Arial";
-        ctx.fillStyle = "#222";
-        ctx.fillText(`${teamA} players`, GAME_WIDTH * 0.25, 205);
-        ctx.fillStyle = "#fff";
-        ctx.fillText(`${teamB} players`, GAME_WIDTH * 0.75, 205);
+        ctx.textBaseline = "middle";
+        ctx.font = `900 ${fontSize}px "Arial Black", Impact, sans-serif`;
+        while (ctx.measureText(text).width > maxTextWidth && fontSize > 40) {
+          fontSize -= 4;
+          ctx.font = `900 ${fontSize}px "Arial Black", Impact, sans-serif`;
+        }
+
+        const isMessi = side === "left";
+        const fillColor   = "rgba(255,255,255,0.32)";
+        const strokeColor = isMessi ? "rgba(20,60,120,0.85)"   : "rgba(90,10,10,0.85)";
+        const glowColor   = isMessi ? "rgba(120,200,255,0.55)" : "rgba(120,255,150,0.55)";
+        const innerColor  = isMessi ? "rgba(180,220,255,0.55)" : "rgba(255,180,180,0.55)";
+
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 80;
+        ctx.lineJoin = "round";
+        ctx.lineWidth = Math.max(8, fontSize * 0.07);
+        ctx.strokeStyle = strokeColor;
+        ctx.strokeText(text, 0, 0);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = fillColor;
+        ctx.fillText(text, 0, 0);
+
+        ctx.lineWidth = Math.max(2, fontSize * 0.018);
+        ctx.strokeStyle = innerColor;
+        ctx.strokeText(text, 0, 0);
+
+        ctx.restore();
+      }
+
+      function drawTeamBadge(cx, cy, label, primary, secondary, accent) {
+        const paddingX = 40;
+        const height = 70;
+
+        ctx.save();
+        ctx.font = "900 40px 'Arial Black', Impact, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const textW = ctx.measureText(label).width;
+        const pillW = textW + paddingX * 2;
+        const pillX = cx - pillW / 2;
+        const pillY = cy - height / 2;
+
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 40;
+
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, height, height / 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = secondary;
+        ctx.beginPath();
+        ctx.roundRect(pillX + 6, pillY + 6, pillW - 12, height - 12, (height - 12) / 2);
+        ctx.fill();
+
+        ctx.fillStyle = primary;
+        ctx.fillText(label, cx, cy + 2);
+
+        ctx.restore();
       }
 
       function removeDeadPlayers() {
@@ -3248,9 +3220,6 @@
         }
       }
 
-      /* ============================================================
-         STATUS BAR
-      ============================================================ */
       function setStatus(text, cls) {
         const el = document.getElementById("status");
         el.textContent = text;
@@ -3272,15 +3241,12 @@
         }
 
         setStatus(
-          `${prefix} TEAM A: ${a}  |  TEAM B: ${b}` +
+          `${prefix} MESSI: ${a}  |  RONALDO: ${b}` +
           (cls === "connected" ? "" : "  (test mode)"),
           cls
         );
       }
 
-      /* ============================================================
-         GAME LOOP
-      ============================================================ */
       function gameLoop(now) {
         ctx.save();
         if (screenShake > 0) {
@@ -3293,10 +3259,19 @@
         drawBackground();
         for (const player of players) {
           if (player.hp > 0) player.update(now);
+
+          if (player.megaTimer > 0) {
+            player.megaTimer--;
+            if (player.megaTimer <= 0) {
+              player.megaTimer = 0;
+              player.megaScale = 1;
+            }
+          }
         }
         for (const player of players) {
           if (player.hp > 0) player.draw();
         }
+        updateGrenades();
         updateBullets();
         drawEffects();
         removeDeadPlayers();
@@ -3332,12 +3307,13 @@
             }
 
             logDebug("EVENT: " + data.event + " | " +
-                     JSON.stringify(data.data || {}).slice(0, 160));
+                     JSON.stringify(data.data || {}).slice(0, 600));
 
             const evt = (data.event || data.type || "").toLowerCase();
 
             if (evt === "chat" || evt === "comment") handleChat(data);
             else if (evt === "gift") handleGift(data);
+            else if (evt === "like") handleLike(data);
           };
 
           socket.onerror = () => {
@@ -3360,61 +3336,115 @@
         }
       }
 
-      function pick(obj, ...keys) {
-        if (!obj) return undefined;
-        for (const k of keys) {
-          if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
-            return obj[k];
-          }
+      function resolveGiftName(giftNameRaw) {
+        const raw = String(giftNameRaw || "").trim();
+        if (/^\d+$/.test(raw)) {
+          const name = TIKTOK_GIFT_IDS[parseInt(raw)];
+          return name || "";
         }
-        return undefined;
+        return raw;
       }
 
       function handleChat(data) {
         const info = data.data || data;
-        const username = pick(
+        const username = deepPick(
           info,
           "uniqueId", "userId", "unique_id", "user_id",
           "nickname", "nickName", "nick_name", "displayName"
         ) || "viewer";
         const comment = String(
-          pick(info, "comment", "text", "message", "content") || ""
+          deepPick(info, "comment", "text", "message", "content") || ""
         ).trim().toLowerCase();
-        const avatar = pick(
+        const avatar = deepPick(
           info,
           "profilePictureUrl", "profilePicture", "avatarUrl",
-          "profile_picture_url", "avatar"
+          "profile_picture_url", "avatar", "profilePicUrl"
         ) || DEFAULT_AVATAR;
 
         logDebug(`CHAT user=${username} comment="${comment}"`);
 
-        if (comment === "a" || comment === "team a") addPlayer(username, avatar, "A");
-        else if (comment === "b" || comment === "team b") addPlayer(username, avatar, "B");
+        if (comment === "a" || comment === "team a" || comment === "messi" || comment === "team messi") {
+          const p = addPlayer(username, avatar, "A");
+          if (p) showJoinPopup(p.username, "A");
+        } else if (comment === "b" || comment === "team b" || comment === "ronaldo" || comment === "team ronaldo") {
+          const p = addPlayer(username, avatar, "B");
+          if (p) showJoinPopup(p.username, "B");
+        }
       }
 
       function handleGift(data) {
         const info = data.data || data;
-        const username = pick(
+        const username = deepPick(
           info,
-          "uniqueId", "userId", "unique_id", "user_id", "nickname", "nickName"
-        ) || "viewer";
-        const giftName = String(pick(
-          info, "giftName", "gift_name", "giftId", "gift_id"
-        ) || "");
-        const coinsRaw = pick(
+          "uniqueId", "userId", "unique_id", "user_id",
+          "nickname", "nickName", "nick_name", "displayName",
+          "userUniqueId", "user_unique_id"
+        ) || ("viewer_" + Math.floor(Math.random() * 9999));
+        const avatar = deepPick(
+          info,
+          "profilePictureUrl", "profilePicture", "avatarUrl",
+          "profile_picture_url", "avatar", "profilePicUrl"
+        ) || DEFAULT_AVATAR;
+        const giftNameRaw = deepPick(
+          info, "giftName", "gift_name", "giftId", "gift_id", "name"
+        );
+        const giftName = resolveGiftName(giftNameRaw);
+        const coinsRaw = deepPick(
           info, "diamondCount", "diamonds", "coins",
-          "diamond_count", "giftDiamondCount"
+          "diamond_count", "giftDiamondCount", "diamond_count"
         );
         const coins = parseInt(coinsRaw) || 1;
 
-        logDebug(`GIFT user=${username} name="${giftName}" coins=${coins}`);
+        logDebug(`GIFT user=${username} name="${giftName}" (raw="${giftNameRaw}") coins=${coins}`);
 
-        const player = players.find((p) => p.id === username);
+        let player = players.find((p) => p.id === username);
         if (!player) {
-          logDebug(`Gift ignored - user ${username} not on a team`);
+          const a = players.filter(p => p.team === "A").length;
+          const b = players.filter(p => p.team === "B").length;
+          const team = a <= b ? "A" : "B";
+          player = addPlayer(username, avatar, team);
+          logDebug(`Gift auto-joined ${username} to ${team}`);
+        }
+        if (!player) return;
+        giftAttack(coins, player.team, giftName, player.id);
+      }
+
+      function handleLike(data) {
+        const info = data.data || data;
+        const username = deepPick(
+          info,
+          "uniqueId", "userId", "unique_id", "user_id",
+          "nickname", "nickName", "nick_name", "displayName"
+        );
+        const likeCountRaw = deepPick(info, "likeCount", "count", "repeatCount");
+        const likeCount = Math.max(1, parseInt(likeCountRaw) || 1);
+
+        if (!username) {
+          logDebug("LIKE with no username — ignored");
           return;
         }
-        giftAttack(coins, player.team, giftName, player.id);
+
+        const player = players.find((p) => p.id === username && p.hp > 0);
+        if (!player) {
+          logDebug(`LIKE ignored — ${username} not on a team or dead`);
+          return;
+        }
+
+        const healed = player.heal(LIKE_HEAL_AMOUNT * likeCount);
+        if (healed > 0) {
+          createHealNumber(player.x, player.y, healed);
+          effects.push({
+            type: "likeHeal",
+            x: player.x,
+            y: player.y,
+            team: player.team,
+            life: 40,
+            maxLife: 40,
+          });
+          logDebug(`LIKE heal ${username} +${healed} HP`);
+        } else {
+          logDebug(`LIKE on ${username} — already at max HP`);
+        }
       }
 
       /* ============================================================
@@ -3425,11 +3455,13 @@
 
       document.getElementById("teamAButton").onclick = () => {
         testNumber++;
-        addPlayer("TestA" + testNumber, DEFAULT_AVATAR, "A");
+        const p = addPlayer("TestMessi" + testNumber, DEFAULT_AVATAR, "A");
+        if (p) showJoinPopup(p.username, "A");
       };
       document.getElementById("teamBButton").onclick = () => {
         testNumber++;
-        addPlayer("TestB" + testNumber, DEFAULT_AVATAR, "B");
+        const p = addPlayer("TestRonaldo" + testNumber, DEFAULT_AVATAR, "B");
+        if (p) showJoinPopup(p.username, "B");
       };
       document.getElementById("giftButton").onclick = () => {
         testGiftToggle++;
@@ -3451,8 +3483,8 @@
           soundEnabled ? "🔊" : "🔇";
       };
       document.getElementById("resetButton").onclick = () => {
-        players = []; bullets = []; effects = [];
-        screenShake = 0; bannerLife = 0;
+        players = []; bullets = []; effects = []; grenades = [];
+        screenShake = 0;
         updateStatus();
         logDebug("RESET");
       };
